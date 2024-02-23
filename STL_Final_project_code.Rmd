@@ -1,0 +1,2951 @@
+---
+title: "Life Expectancy (WHO)"
+author: "Skurativska Kateryna, Caltran Lorenzo, Zolghadr Sharare"
+date: "2023-05-03"
+output:
+  html_document:
+    toc: true
+    #number_sections: true
+  pdf_document:
+    toc: true
+    #number_sections: true
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+library(robustbase)
+if (!require(ggplot2)) {
+  install.packages("ggplot2")
+}
+if (!require(dplyr)) {
+  install.packages("dplyr")
+}
+if (!require(tidyr)) {
+  install.packages("tidyr")
+}
+if (!require(glmnet)) {
+  install.packages("glmnet")
+}
+if (!require(olsrr)) {
+  install.packages("olsrr")
+}
+if (!require(zoo)) {
+  install.packages("zoo")
+}
+if (!require(lmtest)) {
+  install.packages("lmtest")
+}
+
+if (!require(Metrics)) {
+  install.packages("Metrics")
+}
+
+
+
+```
+
+```{r , include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r ,include=FALSE}
+set_plot_dimensions <- function(width_choice , height_choice) {
+options(repr.plot.width=width_choice, repr.plot.height=height_choice)
+}
+```
+
+# Introduction
+
+Our motivation in choosing this data-set for further analysis was due to
+problems that we hope we can answer:
+
+1.  Does various predicting factors which has been chosen initially
+    really affect the Life expectancy?
+
+2.  What are the predicting variables actually affecting the life
+    expectancy?
+
+3.  Should a country having a lower life expectancy value(\<65) increase
+    its healthcare expenditure in order to improve its average lifespan?
+    How does Infant and Adult mortality rates affect life expectancy?
+
+4.  Does Life Expectancy has positive or negative correlation with
+    eating habits, lifestyle, exercise, smoking, drinking alcohol etc.
+
+5.  What is the impact of schooling on the lifespan of humans?
+
+6.  Does Life Expectancy have positive or negative relationship with
+    drinking alcohol?
+
+7.  Do densely populated countries tend to have lower life expectancy?
+
+8.  What is the impact of Immunization coverage on life Expectancy?
+
+9.  Do the sample gives enough evidence to say that Developed countries
+    have more average life expectancy than Developing countries?
+
+10. Do the countries that spend a higher proportion of their resources
+    on human development have a higher life expectancy?
+
+11. What is the most frequent range of life expectancy?
+
+# 1.Obtaining Data
+
+For this project, we obtained the Life Expectancy dataset from Kaggle
+[link](https://www.kaggle.com/datasets/kumarajarshi/life-expectancy-who).
+The health factors data was collected from the WHO data repository
+website, and the corresponding economic data was obtained from the
+United Nations website with the assistance of Deeksha Russell and Duan
+Wang. The dataset was collected for 193 countries between the years
+2000-2015, and it consists of 2938 observations and 22 attributes, of
+which 20 are meant to be predicting variables. These predicting
+variables have been divided into several broad categories, including
+immunization-related factors, mortality factors, economical factors, and
+social factors.
+
+-   Country
+-   Status: this is a categorical value that states wether the country
+    is developing or developed.
+
+20 real valued features:
+
+-   Year
+-   Life Expectancy: life expectancy in age
+-   Adult mortality: the probability that those who have reached age 15
+    will die before reaching age 60 (calculated over 1000 people)
+-   Infant deaths: death of an infant before the first birthday
+    (calculated over 1000 people)
+-   Alcohol: recorded per capita (15+) consumption (in litres of pure
+    alcohol)
+-   Hepatitis B: immunization coverage among 1-year-olds (expressed in
+    percentage)
+-   Measles: number of reported cases per 1000 population
+-   BMI: Average Body Mass Index of entire population
+-   Under-five deaths: number of under-five deaths per 1000 population
+-   Polio: immunization coverage among 1-year-olds (expressed in
+    percentage)
+-   Total expenditure: government expenditure on health as a percentage
+    of total government expenditure (expressed in percentage);
+-   Diphteria: immunization coverage among 1-year-olds (expressed in
+    percentage)
+-   GDP: Gross Domestic Product per capita (expressed in USD)
+-   Population: population of the country in that year
+-   Thinness 1-19 years: prevalence of thinness among children and
+    adolescents for age 10 to 19 (expressed in percentage)
+-   Thinness 5-9 years: prevalence of thinness among children and
+    adolescents for age 5 to 9 (expressed in percentage)
+-   Income composition of resources: Human Development Index in terms of
+    income composition of resources (index ranging from 0 to 1)
+-   Schooling: number of schooling years
+
+It's worth mentioning that the data frame contains some missing values
+for attributes such as Hepatitis B, Alcohol, GDP, and others.
+Additionally, some countries, such as Vanuatu, Tonga, Togo, Cabo Verde,
+etc., have been excluded from the dataset because they had too many
+missing values, which would negatively impact the result.
+
+```{r , include=FALSE}
+# install.packages("car")
+# install.packages("DescTools")
+# install.packages("robustHD")
+
+```
+
+```{r ,include=FALSE}
+library(car)
+library(DescTools)
+library(robustHD)
+library(ggplot2)
+```
+
+```{r}
+
+data <- read.csv("Life Expectancy Data.csv")
+attach(data)
+sprintf("Dataset shape:[%s]", toString(dim(data)))
+head(data)
+
+
+```
+
+# 2. Importing data set and cleaning data
+
+## 2.1 Missing values
+
+### 2.1.1 Data Preprocessing
+
+In this step, we examine the presence of missing values in our dataset
+and perform necessary preprocessing. Approximately 43.87% of the dataset
+contains missing values, which is nearly half of the data. It is
+important to analyze how missing values are distributed across different
+attributes.
+
+Upon analyzing the data, we found that certain attributes have a
+significant number of missing values. The highest number of missing
+values is observed in the attributes of Population, GDP, Hepatitis B,
+followed by Total Expenditure, Alcohol, Income Composition of Resources,
+and Schooling.
+
+```{r}
+#On this step we want to check how many rows have missing values and if yes, preprocess it.
+
+missing.rows = dim(data)[1] -  dim(na.omit(data))[1]
+sprintf("Dataset size: [%s]", toString(dim(data)))
+sprintf("Missing rows: %s (%s%%)", missing.rows, round((missing.rows*100)/dim(data)[1], 2))
+
+missings_df <- data.frame(type=c("missing", "non-missing") ,count = c(missing.rows,  dim(na.omit(data))[1]))
+
+
+```
+
+```{r}
+#343.87% is almost the half of the data-set. Let's see how missing values depends on attribute.
+
+missing_counts <- data.frame(feature = factor(names(data)),
+                    counts=sapply(data, function(x) sum(is.na(x))))
+
+
+#fig.dim = c(8, 6)(16,8)
+ggplot(missing_counts,
+       aes(x=reorder(feature, -counts), y=counts, fill=counts)) +
+                                  geom_bar(stat="identity") +
+                                  ggtitle("Missing counts in each feature") +
+                                  xlab("Feature") + ylab("Missing count") +
+                                  theme(axis.text.x=element_text(angle=20, hjust=1))+
+                                  theme(text = element_text(size = 9))+
+                                  scale_fill_continuous(trans = 'reverse')
+```
+
+The attribute with the most missing values is Population. Dealing with
+missing data presents several challenges, and one approach is to remove
+the missing entries. However, in our case, this would result in
+discarding a substantial portion of our dataset, which could adversely
+affect the accuracy of future predictions. Another option is to replace
+missing values with the mean or median of the Population variable.
+However, due to the wide range of values in this feature, such an
+approach would introduce inaccuracies.
+
+After careful consideration, we decided to conduct further research and
+obtained actual values for most of the missing data from The World Bank
+website
+([link](https://databank.worldbank.org/reports.aspx?source=2&country=ATG,BHS).
+The next step involves importing a new dataset and replacing the missing
+values with the data retrieved from The World Bank site.
+
+### 2.1.2 Handling the Population Attribute
+
+```{r}
+"Handling Population attribute:"
+population_data <- subset(data, select = c(Country, Year, Population))
+pp <- population_data[is.na(population_data$Population), ]
+head(pp)
+dim(pp)
+
+unique_countries <- unique(pp$Country)
+sprintf(unique_countries)
+
+```
+
+```{r}
+missingdata <- read.csv("population_missing.csv")
+Countries <- unique(missingdata$Country)
+for (x in Countries){
+  for (i in (2000:2015)){
+      if (i %in% data[data$Country==x, ]$Year==TRUE){
+        data[data$Country==x & data$Year==i, ]$Population <- missingdata[missingdata$Country==x & missingdata$Year==i, ]$Population
+      }
+  }
+}
+```
+
+We successfully obtained actual values for a substantial portion of the
+missing data, and as a result, the number of missing values in the
+Population attribute has been reduced to 50 entries. Consequently, we
+can now proceed to remove these remaining missing values from our
+dataset.
+
+```{r}
+print(data[is.na(data$Population),])
+
+sum(is.na(data$Population))
+
+```
+
+```{r}
+data <- data[!is.na(data$Population), ]
+sum(is.na(data$Population))
+
+```
+
+```{r}
+gdp_missingdata <- read.csv("GDP_missing.csv", sep=';')
+Countries <- unique(gdp_missingdata$Country)
+#print(Countries)
+Year <- unique(data$Year)
+
+for (x in Countries){
+  for (i in Year){
+    #print(last_data[last_data$Country == x & last_data$Year == i, "GDP"]  )
+    #print(gdp_missingdata[gdp_missingdata$Country == x, paste("X", i, sep="")])
+    data[data$Country == x & data$Year == i, "GDP"] <- gdp_missingdata[gdp_missingdata$Country == x, paste("X", i, sep="")]
+    
+  }
+}
+
+print(data[is.na(data$GDP),])
+
+sum(is.na(data$Population))
+
+data <- data[!is.na(data$GDP), ]
+sum(is.na(data$GDP))
+```
+
+### 2.1.3 Handling Missing Values in Other Attributes
+
+After successfully addressing the missing values in the Population and
+GDP attributes, we still have other attributes that contain missing
+values. For these attributes, we were unable to find missing values from
+external sources. Hence, we need to employ different techniques to
+handle them, such as imputation with mean, imputation with median, or
+combined imputation, depending on the nature of the data.
+
+```{r}
+missing.rows = dim(data)[1] -  dim(na.omit(data))[1]
+print(missing.rows)
+```
+
+To handle the missing data, we will utilize mean or median imputation.
+Mean imputation is suitable for attributes that follow a normal or
+approximately symmetric distribution without significant outliers. On
+the other hand, median imputation is more appropriate for attributes
+with skewed distributions and significant outliers. To assess the
+distribution of each attribute, we will plot histograms for
+visualization.
+
+```{r}
+
+# Filter the dataframe to include only the desired columns
+columns <- names(data)[4:length(names(data))]
+filtered_data <- data[, columns]
+
+# Remove NA values from the filtered data
+filtered_data <- na.omit(filtered_data)
+
+# Set the overall layout for the combined plot
+par(mfrow = c(3, 3))
+par(mar = c(1, 2, 3, 1))  # Adjust the margins for each plot
+
+# Loop through each column and create a boxplot plot
+for (i in 1:length(columns)) {
+  hist(filtered_data[[columns[i]]], main = columns[i], col = "#13527a", border = "#ebebeb")
+}
+
+par(mfrow = c(1, 1))  # Reset the layout to a single plot
+
+```
+
+Based on the previous histograms, we can assume that attributes such as
+Life Expectancy, Total Expenditure, Income Composition of Resources, and
+Schooling exhibit a bell-shaped normal curve. Therefore, these
+attributes are potential candidates for mean imputation. However, before
+applying mean imputation, we also need to examine the presence of
+outliers in each attribute to ensure that our imputation process is not
+influenced by extreme values.
+
+To identify outliers in each attribute, we will utilize boxplots. Upon
+analyzing the previous boxplots, we observe that out of the four
+candidates identified earlier, only Schooling and Income Composition of
+Resources are more suitable for mean imputation. For the remaining 15
+attributes, we have decided to proceed with median imputation.
+
+```{r}
+columns_to_remove <- c("Country", "Year", "Status")  
+
+# Specify the names of the columns to remove
+numeric_data <- data[, -which(names(data) %in% columns_to_remove)]
+numeric_data <- as.data.frame(sapply(numeric_data, as.numeric))
+attribute_names <- names(numeric_data)
+
+imputed_data <- data.frame(numeric_data)
+
+mean_attribute <- c("Income.composition.of.resources", "Schooling")
+
+median_attribute <-setdiff(attribute_names, mean_attribute)
+
+for (attribute in mean_attribute) {
+  imputed_data[[attribute]] <- ifelse(is.na(imputed_data[[attribute]]), mean(imputed_data[[attribute]], na.rm = TRUE), imputed_data[[attribute]])
+}
+
+for (attribute in median_attribute) {
+  imputed_data[[attribute]] <- ifelse(is.na(imputed_data[[attribute]]), median(imputed_data[[attribute]], na.rm = TRUE), imputed_data[[attribute]])
+}
+
+imputed_data <- data.frame(data[, which(names(data) %in% columns_to_remove)], imputed_data)
+original_data <- data.frame(data)
+data <- imputed_data
+```
+
+Furthermore, we check the number of NA values in the dataset again to
+gain a better understanding of the extent of missing data.
+
+```{r}
+missing.rows = dim(data)[1] -  dim(na.omit(data))[1]
+sprintf("Dataset size: [%s]", toString(dim(data)))
+sprintf("Missing rows: %s (%s%%)", missing.rows, round((missing.rows*100)/dim(data)[1], 2))
+
+```
+
+## 2.2 Outliers
+
+In this stage, we have confirmed that our dataset does not contain any
+missing values (NA-values). Hence, we can proceed to the next step of
+processing outliers. There are several methods available for outlier
+detection, including visual techniques like boxplots and histograms, as
+well as statistical methods such as Tukey's Method. Once outliers have
+been identified using these methods, it is important to preprocess them
+accordingly. Several techniques can be employed for outlier
+preprocessing, including:
+
+1.  Dropping outliers: One approach is to remove the outliers from the
+    dataset entirely, excluding them from subsequent analyses. This can
+    be appropriate when outliers are deemed as data errors or extreme
+    values that do not align with the overall pattern of the data.
+
+2.  Limiting/Winsorizing outliers: Instead of eliminating outliers, this
+    technique involves capping or replacing outlier values with
+    predefined limits. By setting a threshold, the extreme values are
+    brought within an acceptable range while retaining their relative
+    position in the distribution. Winsorizing is a common variation of
+    this approach.
+
+3.  Transforming the data: Another strategy is to apply mathematical
+    transformations to the data, such as taking logarithms, inverses,
+    square roots, or other suitable transformations. These
+    transformations can help normalize the distribution and mitigate the
+    impact of outliers on subsequent analyses.
+
+Our plan is to describe and apply these three methods. For each method,
+we will evaluate the results of the model. The final decision on the
+best method will be based on the performance of the models. The first
+step is to plot boxplots for each attribute in our dataset, which will
+help us identify potential outliers.
+
+```{r}
+
+# Filter the dataframe to include only the desired columns
+columns <- names(data)[4:length(names(data))]
+filtered_data <- data[, columns]
+
+# Remove NA values from the filtered data
+filtered_data <- na.omit(filtered_data)
+
+# Set the overall layout for the combined plot
+par(mfrow = c(2, 4))
+par(mar = c(1, 2, 3, 1))  # Adjust the margins for each plot
+
+# Loop through each column and create a boxplot plot
+for (i in 1:length(columns)) {
+  boxplot(filtered_data[[columns[i]]], main = columns[i], col = "#ebebeb", border = "#13527a")
+}
+
+par(mfrow = c(1, 1))  # Reset the layout to a single plot
+
+
+```
+
+```{r}
+#check the number of outliers in each features
+data_tukey <- data.frame(data)
+
+outlier_count <- function(col, data_tukey) {
+  cat(paste(rep("-", 1), col, rep("-", 1)),"\n")
+  q75 <- quantile(data_tukey[[col]], 0.75)
+  q25 <- quantile(data_tukey[[col]], 0.25)
+  iqr <- q75 - q25
+  min_val <- q25 - (iqr * 1.5)
+  max_val <- q75 + (iqr * 1.5)
+  outlier_count <- sum(data_tukey[[col]] > max_val | data_tukey[[col]] < min_val)
+  outlier_percent <- round(outlier_count / length(data_tukey[[col]]) * 100, 2)
+  cat("Number of outliers:", outlier_count, "\n")
+  cat("Percent of data that is outlier:", outlier_percent, "%\n")
+  cat("\n")
+}
+
+# Iterate over the column names and call the function
+cont_vars <- c("Life.expectancy","Adult.Mortality","infant.deaths","Alcohol","percentage.expenditure","Measles","five.deaths","Hepatitis.B","HIV.AIDS","BMI","Polio","Total.expenditure","Diphtheria"
+,"GDP","Population","thinness..1.19.years","thinness.5.9.years","Income.composition.of.resources","Schooling")
+for (col in cont_vars) {
+  outlier_count(col, data_tukey)
+}
+```
+
+| Metric                          | Number of outliers | Percent of data that is outlier |
+|---------------------------|-----------------:|--------------------------:|
+| Life.expectancy                 |                 19 |                            0.67 |
+| Adult.Mortality                 |                 88 |                            3.09 |
+| infant.deaths                   |                329 |                           11.56 |
+| Alcohol                         |                  2 |                            0.07 |
+| percentage.expenditure          |                369 |                           12.97 |
+| Measles                         |                521 |                           18.31 |
+| five.deaths                     |                  0 |                             NaN |
+| Hepatitis.B                     |                313 |                              11 |
+| HIV.AIDS                        |                546 |                           19.19 |
+| BMI                             |                  0 |                               0 |
+| Polio                           |                259 |                             9.1 |
+| Total.expenditure               |                 42 |                            1.48 |
+| Diphtheria                      |                282 |                            9.91 |
+| GDP                             |                491 |                           17.26 |
+| Population                      |                405 |                           14.24 |
+| thinness..1.19.years            |                109 |                            3.83 |
+| thinness.5.9.years              |                106 |                            3.73 |
+| Income.composition.of.resources |                116 |                            4.08 |
+| Schooling                       |                 62 |                            2.18 |
+
+Upon examining the attributes, we observed that BMI is the only
+attribute that does not exhibit any outliers. However, attributes such
+as Alcohol, Life Expectancy, and Income Composition of Resources contain
+a relatively small number of outliers. Consequently, completely dropping
+these outliers might not be the most appropriate solution for this
+particular problem.
+
+To address this, we will begin by utilizing the z-score method for
+identifying and removing outliers.
+
+1.  Z-score method The z-score method calculates the number of standard
+    deviations an observation is away from the mean. By applying a
+    threshold, we can identify data points that deviate significantly
+    from the expected values. These identified outliers can then be
+    further processed using the previously mentioned outlier
+    preprocessing techniques.
+
+Implementing the z-score method will allow us to effectively handle the
+outliers in the dataset, ensuring that they do not unduly influence the
+subsequent analyses.
+
+```{r}
+
+# Select the numeric attributes for outlier removal (excluding the ID attributes)
+data_z <- data.frame(data)
+columns_to_remove <- c("Country", "Year", "Status")
+
+# Specify the names of the columns to remove
+numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+# Filter non-empty numeric columns
+non_empty_cols <- numeric_cols[sapply(data_z[numeric_cols], function(x) length(na.omit(x)) > 0)]
+
+# Calculate Z-scores for each numeric attribute
+z_scores <- lapply(data_z[non_empty_cols], function(x) (x - mean(x)) / sd(x))
+
+# Set the threshold for outlier detection (e.g., 3)
+threshold <- 3
+
+# Identify outliers based on Z-scores
+outliers <- lapply(z_scores, function(z) abs(z) > threshold)
+
+# Count the number of outliers for each attribute
+outlier_counts <- sapply(outliers, sum)
+
+# Print the number of outliers for each attribute
+print(outlier_counts)
+
+# Combine the outlier logical vectors into a matrix
+outlier_matrix <- do.call(cbind, outliers)
+
+# Check if any outliers exist for each row (observation)
+row_has_outliers <- apply(outlier_matrix, 1, any)
+
+# Remove rows with outliers from the data frame
+data_z_clean <- data_z[!row_has_outliers, ]
+
+# Check the dimensions of the cleaned data frame
+dim(data_z_clean)
+
+
+```
+
+```{r}
+#for data_z
+columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+# Specify the names of the columns to remove
+numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+print(f)
+model <- lm(f, data = data_z_clean)
+
+# Print the model summary
+summary(model)
+
+
+#for data
+columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+# Specify the names of the columns to remove
+numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+
+model <- lm(f, data = data)
+
+# Print the model summary
+summary(model)
+```
+
+2.  Tukey's Fences Tukey's method, also known as Tukey's fences, defines
+    upper and lower bounds based on the interquartile range (IQR). Data
+    points that fall beyond these bounds are considered potential
+    outliers. This method provides a robust approach to identifying
+    outliers, as it is less sensitive to extreme values.
+
+    ```{r}
+
+    # Select the numeric attributes for outlier removal (excluding the ID attributes)
+    data_iqr <- data.frame(data)
+    columns_to_remove <- c("Country", "Year", "Status")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_iqr)[!(names(data_iqr) %in% columns_to_remove)]
+
+    # Calculate robust statistics for each numeric attribute
+    robust_stats <- lapply(data_iqr[numeric_cols], function(x) {
+      q1 <- quantile(x, 0.25)
+      q3 <- quantile(x, 0.75)
+      iqr <- q3 - q1
+      lower_fence <- q1 - 1.5 * iqr
+      upper_fence <- q3 + 1.5 * iqr
+      list(lower_fence = lower_fence, upper_fence = upper_fence)
+    })
+
+    # Identify outliers based on robust statistics
+    outliers <- lapply(1:length(numeric_cols), function(i) {
+      lower_fence <- robust_stats[[i]]$lower_fence
+      upper_fence <- robust_stats[[i]]$upper_fence
+      x <- data_iqr[[numeric_cols[i]]]
+      x < lower_fence | x > upper_fence
+    })
+
+    # Count the number of outliers for each attribute
+    outlier_counts <- sapply(outliers, sum)
+
+    # Print the number of outliers for each attribute
+    #print(outlier_counts)
+
+    # Combine the outlier logical vectors into a matrix
+    outlier_matrix <- do.call(cbind, outliers)
+
+    # Check if any outliers exist for each row (observation)
+    row_has_outliers <- apply(outlier_matrix, 1, any)
+
+    # Remove rows with outliers from the data frame
+    data_iqr_clean <- data_iqr[!row_has_outliers, ]
+
+    # Check the dimensions of the cleaned data frame
+    dim(data_iqr_clean)
+
+    ```
+
+    ```{r}
+    #for data_z
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+    print(f)
+    model <- lm(f, data = data_iqr_clean)
+
+    # Print the model summary
+    summary(model)
+
+
+    #for data
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+
+    model <- lm(f, data = data)
+
+    # Print the model summary
+    summary(model)
+    ```
+
+    Comparing these two models, we can see that the second model, which
+    uses the original **`data`** dataset, has a higher adjusted
+    R-squared value (0.8168) compared to the first model (0.7602). This
+    indicates that the second model explains a greater proportion of the
+    variance in the dependent variable (life expectancy) based on the
+    independent variables.
+
+    Additionally, the second model has a slightly higher residual
+    standard error (4.042) compared to the first model (2.704),
+    suggesting that the second model's predictions have slightly more
+    error or variability around the regression line. Therefore comparing
+    IQR method and Z-score the second one is winning.
+
+3.  Imputation + outliers
+
+    ```{r}
+
+    data_impute_out <- data.frame(data)
+    attribute_names <- names(data_impute_out)
+    id_attribute <- c("Country", "Year", "Status")
+    col_names <-setdiff(attribute_names, id_attribute)
+
+    for (col in col_names){
+      if (col != "BMI") data_impute_out[[col]] <-dlookr::imputate_outlier(data_impute_out, col , method = "mean")
+    } 
+
+    ```
+
+    ```{r}
+    #for data_imputation
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+    print(f)
+    model <- lm(f, data = data_impute_out)
+
+    # Print the model summary
+    summary(model)
+
+
+    #for data
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+
+    model <- lm(f, data = data)
+
+    # Print the model summary
+    summary(model)
+    ```
+
+4.  Winsorisation Winsorization is another outlier preprocessing
+    technique that involves replacing extreme outlier values with less
+    extreme values within a predefined range. This approach helps to
+    mitigate the impact of outliers while still retaining the relative
+    position of the data points in the distribution.
+
+    ```{r}
+    library(robustHD)
+    library(DescTools)
+
+
+    data_winsorize <- data.frame(data)
+    attribute_names <- names(data_winsorize)
+    id_attribute <- c("Country", "Year", "Status")
+    col_names <-setdiff(attribute_names, id_attribute)
+
+    # Loop over each attribute (column) in the data frame
+    for (col_name in col_names) {
+      # Access the attribute (column) using the col_name variable
+      column <- data_winsorize[[col_name]]
+      data_winsorize[[col_name]] <- Winsorize(data_winsorize[[col_name]],probs = c(0.05, 0.95), na.rm = TRUE)
+      
+    }
+    ```
+
+    ```{r}
+    #for data_imputation
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+    print(f)
+    model <- lm(f, data = data_winsorize)
+
+    # Print the model summary
+    summary(model)
+
+
+    #for data
+    columns_to_remove <- c("Country", "Year", "Status", "Life.expectancy")
+
+    # Specify the names of the columns to remove
+    numeric_cols <- names(data_z)[!(names(data_z) %in% columns_to_remove)]
+
+    f <- as.formula(paste("Life.expectancy ~", paste(numeric_cols, collapse = " + ")))
+
+    model <- lm(f, data = data)
+
+    # Print the model summary
+    summary(model)
+    ```
+
+let's examine the Adjusted R-squared values, as they account for the
+number of predictors in each model:
+
+|       Model       | Adjusted R-squared |
+|:-----------------:|:------------------:|
+| `data_winsorize`  |       0.8722       |
+|     `data_z`      |       0.8638       |
+|   `data_Tukey`    |       0.7602       |
+| `data_impute_out` |       0.8159       |
+
+Based on the Adjusted R-squared values, we can observe that both the
+**`data_winsorize`** and **`data_z`** models have the highest values
+among the five models, with Adjusted R-squared values of 0.8722 and
+0.8638, respectively. These higher values indicate that these models
+explain a larger proportion of the variance in the dependent variable
+compared to the other models.
+
+However, in addition to the Adjusted R-squared values, we also need to
+consider the distribution of the life expectancy variable after applying
+the model. In our research, the assumption of a normal distribution is
+crucial. It is important to note that winsorization, one of the
+techniques used in the data_winsorize model, may potentially disturb the
+normality distribution of the life expectancy variable.
+
+Taking this into consideration, we will choose the data_z model as it
+also provides a high Adjusted R-squared value (0.8638) while preserving
+the normality assumption of the life expectancy distribution.
+
+```{r}
+#data <- data_winsorize
+data <- data_z
+# data <- data_iqr_clean
+# data <- data_impute_out
+# data <- data_imp
+```
+
+# 2.3 Data Transformation
+
+## 2.3.1 Factorizing categorical variables:
+
+Before proceeding with the data exploration phase, it is important to
+perform necessary preprocessing steps to ensure accurate and meaningful
+analysis. One such step is the factorization of the Status variable.
+
+```{r}
+# Convert 'Status' variable to a factor
+data$Status <- factor(data$Status)
+
+# Optional: Rename the factor levels if desired
+levels(data$Status) <- c("Developing", "Developed")
+
+#Saving a copy of data before scaling it
+original_data_ver2 <- data.frame(data)
+```
+
+Since our analysis focuses on predicting Life Expectancy, it is crucial
+to ensure that this attribute follows a normal distribution.Therefore we
+re interested in having Life Expectancy attribute normal distribution.
+
+## 2.3.2 Transforming the Life Expectancy variable:
+
+In order to improve the distribution and address any potential skewness,
+we applied a square root transformation to the Life Expectancy values.
+This transformation helps in normalizing the data and reducing the
+impact of extreme values.
+
+```{r}
+library(moments)
+data$Life.expectancy <- sqrt(max(data$Life.expectancy+1)- data$Life.expectancy)
+data$Life.expectancy<- scale(data$Life.expectancy, scale=TRUE, center = TRUE)
+ggplot(data, aes(x=Life.expectancy)) +
+    geom_density(alpha=.3, fill="#13527a", color="#13527a", linewidth=1.5)+
+    geom_vline(aes(xintercept=mean(Life.expectancy)))+
+    ggtitle("Distribution density of Life.expectancy") +
+    theme(text = element_text(size = 18))
+
+# Compute kurtosis of the Life.expectancy variable
+#install package 'moments'
+kurtosis_value <- kurtosis(data$Life.expectancy, na.rm = TRUE)
+
+
+cat("Skewness:", toString(skewness(data$Life.expectancy, na.rm = TRUE)),"\n")
+cat("kurtosis :",kurtosis_value)
+```
+
+The skewness value of -0.048 is close to zero, indicating that the
+distribution is approximately symmetric. A skewness value close to zero
+suggests that the data is relatively normally distributed or very close
+to it in terms of symmetry.
+
+The kurtosis value of 2.94 is slightly less than 3. This suggests that
+the distribution has slightly heavier tails and potentially a slightly
+sharper peak compared to a normal distribution. However, a kurtosis
+value of 2.94 is still relatively close to 3, indicating that the
+distribution is not significantly different from a normal distribution
+in terms of its tail behavior.
+
+Overall, based on the skewness and kurtosis values provided, the data
+appears to have a reasonably symmetric distribution and is relatively
+close to a normal distribution in terms of both skewness and kurtosis.
+
+## 2.3.3 Scaling the numeric variables
+
+Another important aspect of data preprocessing is scaling the variables.
+It enables us to compare and analyze variables with different scales and
+units without any dominance based on their magnitudes. Scaling is
+particularly beneficial when working with algorithms that are sensitive
+to variable scales, such as regression models or distance-based
+algorithms.
+
+By scaling the variables, we enhance interpretability and facilitate
+comparison. Scaling also aids in visualizing the data and identifying
+patterns or relationships between variables more effectively and
+ensuring consistency in scale across all variables.
+
+```{r}
+library(dplyr)
+# Exclude non-numeric columns from the subset
+numeric_cols <- setdiff(colnames(data), c("Status", "Country", "Year"))
+subset_data <- select(data, all_of(numeric_cols))
+
+# Scale the subset_data
+scaled_data <- as.data.frame(scale(subset_data, scale = TRUE, center = TRUE))
+
+# Add the non-numeric columns back to the scaled data
+scaled_data$Status <- original_data_ver2$Status
+
+scaled_all_data <- cbind(original_data_ver2["Country"], original_data_ver2["Year"], scaled_data)
+```
+
+By performing factorization of the Status variable, transforming the
+Life.expactancy variable, and finally scaling the numeric variables, we
+have prepared the dataset for further exploration and analysis, setting
+the stage for uncovering meaningful insights and relationships within
+the data.
+
+# 3. Exploration of the data
+
+Here we want to use methods both Univariate and Bivariate analysis. Our
+goals:
+
+1.  Exploring the relationship between continuous variables and the
+    target variable (life expectancy) as well as their
+    interrelationships.
+
+2.  Investigating the impact of categorical variables on the target
+    variable (life expectancy).
+
+3.  Examining the relationship between the variables "Country Status"
+    and "Year" with continuous variables. Note that due to the dataset
+    containing a large number of countries with small sample sizes,
+    making country-to-country comparisons may not provide significant
+    insights.
+
+## 3.1 Numerical variables
+
+### 3.1.1 Univariate Analysis
+
+Univariate analysis is looking at the data for each variable on its own.
+This is generally done best by using histograms for continuous data,
+count/barplots for categorical data and of course by getting the
+descriptive stats by using .summery().
+
+```{r}
+# Filter the dataframe to include only the desired columns
+col_names_normal <- colnames(data)[4:22]
+filtered_data <- data[, col_names_normal]
+
+# Remove NA values from the filtered data
+filtered_data <- na.omit(filtered_data)
+
+# Set the overall layout for the combined plot
+par(mfrow = c(3, 3))
+par(mar = c(1, 4, 3, 1))  # Adjust the margins for each plot
+
+# Loop through each column and create a density plot
+for (name in col_names_normal) {
+  mean_val <- mean(filtered_data[[name]], na.rm = TRUE)
+  
+  density_values <- density(filtered_data[[name]])
+  
+  plot(density_values, main = paste("density of", name), 
+       xlab = name, ylab = "Density", col = "#13527a")
+  
+  abline(v = mean_val, col =  "red", lwd = 2)
+}
+
+par(mfrow = c(1, 1))  # Reset the layout to a single plot
+
+```
+
+As you can see, life expectancy, total expenditure,
+Income.composition.of.resources and schooling looks like having normal
+distributions.
+
+Let's check normality with qq-plots
+
+```{r}
+# Filter the dataframe to include only the desired columns
+col_names_normal <- colnames(data)[4:22]
+filtered_data <- data[, col_names_normal]
+
+# Remove NA values from the filtered data
+filtered_data <- na.omit(filtered_data)
+
+# Set the overall layout for the combined plot
+par(mfrow = c(2, 3))
+par(mar = c(1, 4, 3, 1))  # Adjust the margins for each plot
+
+# Loop through each column and create a density plot
+for (name in col_names_normal) {
+  column <- data[[name]]
+  summary(column)
+  qqnorm(column, xlab = name, ylab="qq-plot", main= name, col="#13527a")
+  qqline(column, col="red")
+}
+
+par(mfrow = c(1, 1))  # Reset the layout to a single plot
+
+
+```
+
+### 3.1.2 Bivariate Analysis
+
+1.  Continuous variables compared to the life expectancy (target
+    variable) and to one another
+2.  Categorical variables compared to the life expectancy (target
+    variable)
+3.  Comparison of Country Status and Year to Continuous variables
+    (country has an extremely large number of values with small sample
+    sizes, so country comparisons aren't especially helpful for this
+    dataset)
+
+```{r}
+# Specify the column names of the variables you want to plot
+col_names <- c("Adult.Mortality", "infant.deaths", "Alcohol", "percentage.expenditure",
+               "Measles", "under.five.deaths", "Hepatitis.B", "BMI", "Polio",
+               "Total.expenditure", "Diphtheria", "Population", "GDP", "HIV.AIDS",
+               "thinness..1.19.years", "Income.composition.of.resources", "Schooling")
+l <- Status=="Developed"
+
+# Create a loop to generate scatter plots with smoothing lines for each variable
+par(mfrow = c(2, 2))
+par(mar = c(1, 4, 3, 1))  # Adjust the margins for each plot
+for (col in col_names) {
+  scatter.smooth(data[[col]], data$Life.expectancy, col = l + 1, pch = l + 1,
+                 main= col, ylab = "Life Expectancy")
+  legend("bottomright", legend = unique(data$Status), col = 1:2, pch = 1:2)
+}
+par(mfrow = c(1, 1))  # Reset the layout to a single plot
+
+
+```
+
+This scatter plot shows that 'Schooling', 'Income composition of
+resources' and 'BMI' have a strong positive correlation with Life
+Expectancy. On the other hand 'Adult Mortality', 'HIV/AIDS' have a
+negative correlation with Life Expectancy.
+
+In our analysis, we used the correlation matrix to explore the
+relationships among the scaled variables. The matrix was visualized as a
+heatmap, where darker or lighter shades indicated stronger correlations.
+This allowed us to identify clusters or groups of variables that were
+highly correlated. By calculating the correlation coefficients between
+pairs of variables, we gain insights into the strength and direction of
+their linear associations.
+
+```{r}
+library(ggcorrplot)
+library(ggplot2)
+
+set_plot_dimensions(25, 25)
+
+corr <- round(cor(subset(scaled_data, select = -c(Status))), 3)
+cU <- format(corr)
+
+ggcorrplot(corr, lab = TRUE, lab_size = 1.5, method = "circle", pch = 1, colors = c("purple", "#ebebeb", "#13527a")) +
+  theme(axis.text.x = element_text(size = 10))
+
+```
+
+After scaling the variables, we examined the correlation between them
+and identified several weak correlations:
+
+-   Schooling and Income Composition of Resources
+-   Thinness 5-9 years and Thinness 1-19 years
+-   Under-five deaths and Infant deaths
+-   Poilo and Diphtheria
+
+While these variables exhibit some correlation, it does not necessarily
+indicate collinearity among independent variables. Collinearity refers
+to a high degree of correlation between independent variables, which can
+pose challenges in statistical analysis, particularly in linear models.
+
+To assess the potential collinearity, we recommend calculating the
+Variance Inflation Factor (VIF) for the variables in a linear model. The
+VIF helps identify if collinearity is present by quantifying the
+inflation in the variances of the regression coefficients. A VIF value
+exceeding 5 suggests a problem with collinearity, indicating that one or
+more variables are highly correlated with each other.
+
+If high VIF values are observed, it is advisable to address the
+collinearity issue by eliminating one of the correlated variable pairs.
+This step helps mitigate the impact of collinearity and improves the
+stability and interpretability of the regression model.
+
+It's important to note that weak correlations between variables do not
+necessarily indicate collinearity. Therefore, conducting further
+analysis, such as calculating the VIF, is crucial to identify and
+address any potential collinearity issues in the dataset.
+
+```{r }
+library(car)
+mod.linear <- lm(Life.expectancy~ ., data = subset(scaled_data, select =-c(Status)))
+vifs <- data.frame(vif(mod.linear))
+
+set_plot_dimensions(16,8)
+ggplot(vifs, aes(y=vif.mod.linear., x=row.names(vifs))) + 
+    geom_bar(aes(fill=vif.mod.linear.>5),stat="identity")+
+    scale_y_continuous(trans = "sqrt",  breaks = c(5, 10, 50, 100))+
+    geom_hline(yintercept = 5, colour = "purple") + 
+    ggtitle("VIF per feature") +
+    xlab("Featurs") + ylab("VIF") +
+    theme(axis.text.x=element_text(angle=20, hjust=1))+
+    theme(text = element_text(size = 10))+
+    scale_fill_brewer(palette="RdYlBu")
+
+
+```
+
+After observing the correlation matrix, it becomes evident that three
+pairs of variables display high Variance Inflation Factors (VIFs). In
+order to address this issue of collinearity, we will proceed by omitting
+one variable from each correlated pair based on their VIF values.
+
+Specifically, the variables "infant.deaths" and "under.five.deaths"
+exhibit VIFs that significantly exceed the threshold of 5, indicating a
+strong collinearity. To resolve this, we will remove the variable
+"under.5.deaths" since it possesses a higher VIF value.
+
+Similarly, we will eliminate the variable
+"Income.composition.of.resources" due to its higher VIF value.
+
+Furthermore, we will exclude the variable "thinness.5.9.years" as it
+demonstrates a higher VIF value.
+
+The updated version of the data, after removing these three features,
+will be saved as "data_EDA." This modified dataset will be utilized as a
+dataframe for further analysis in the "Model_EDA" section.
+
+```{r}
+data_EDA <- subset(scaled_data, select = -c(under.five.deaths))
+data_EDA <- subset(data_EDA, select = -c(thinness.5.9.years))
+```
+
+```{r}
+library(ggcorrplot)
+
+set_plot_dimensions(25, 25)
+
+corr <- round(cor(subset(data_EDA , select =-c(Status))), 3)
+cU <- format(corr)
+
+ggcorrplot(corr, lab = TRUE, lab_size = 2, method = "circle", colors = c("purple","#ebebeb","#13527a" ))
+
+```
+
+```{r}
+mod.linear <- lm(Life.expectancy~ ., data = subset(data_EDA , select =-c(Status)))
+vifs <- data.frame(vif(mod.linear))
+
+set_plot_dimensions(16,8)
+ggplot(vifs, aes(y=vif.mod.linear., x=row.names(vifs))) + 
+    geom_bar(aes(fill=vif.mod.linear.>5),stat="identity")+
+    scale_y_continuous(trans = "sqrt",  breaks = c(5, 10, 50, 100))+
+    geom_hline(yintercept = 5, colour = "purple") + 
+    ggtitle("VIF per feature") +
+    xlab("Featurs") + ylab("VIF") +
+    theme(axis.text.x=element_text(angle=20, hjust=1))+
+    theme(text = element_text(size = 10))+
+    scale_fill_brewer(palette="RdYlBu")
+```
+
+The correlation matrix now shows no suspicious coeffecients that might
+indicate collinearity between the features. Upon closer examination, it
+becomes evident that the VIF values fall within an acceptable range, all
+being below the threshold of 5. With this observation, we can
+confidently state that the data_EDA is now prepared and suitable for
+further analysis in the Model_EDA phase.
+
+### 3.1.3 Continuous to Life Expectancy comparison(ANOVA)
+
+To check if the continuous variables influence Life Expectancy we apply
+ANOVA Test to each variable.
+
+For each variable we will categorize countries into one of the three
+categories: 'Low', 'Medium' and 'High' depending on the country's
+average for that certain feature.
+
+First we group the data by country and find the average life expectancy
+over the 16 years and we compute the average for the feature we want to
+test.
+
+We are going to get a new dataframe having average life and level of the
+tested feature (low, medium, or high) as columns and each row
+corresponding to one among the 193 countries in the dataset.
+
+We then apply the ANOVA Test, where the null hypothesis is H0: mu_low =
+mu_medium = mu_high and the alternate hypothesis is that not all the
+means are equal.
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Adult_Mortality=mean(Adult.Mortality))
+x <- data3 %>% filter(Average_Adult_Mortality <= 159)
+y <- data3 %>% filter(Average_Adult_Mortality > 159 & Average_Adult_Mortality <= 333)
+z <- data3 %>% filter(Average_Adult_Mortality > 333)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Adult.Mortality = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Adult.Mortality = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Adult.Mortality = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Adult.Mortality, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Alcohol=mean(Alcohol))
+
+x <- data3 %>% filter(Average_Alcohol <= 6)
+y <- data3 %>% filter(Average_Alcohol > 6 & Average_Alcohol <= 8)
+z <- data3 %>% filter(Average_Alcohol > 8)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Alcohol = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Alcohol = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Alcohol = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Alcohol, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Percentage_Expenditure=mean(percentage.expenditure))
+
+x <- data3 %>% filter(Average_Percentage_Expenditure <= 99)
+y <- data3 %>% filter(Average_Percentage_Expenditure > 99 & Average_Percentage_Expenditure <= 422)
+z <- data3 %>% filter(Average_Percentage_Expenditure > 422)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Percentage_Expenditure = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Percentage_Expenditure = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Percentage_Expenditure = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Percentage_Expenditure, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Hepatitis_B=mean(infant.deaths))
+
+x <- data3 %>% filter(Average_Hepatitis_B <= 78)
+y <- data3 %>% filter(Average_Hepatitis_B > 78 & Average_Hepatitis_B <= 90)
+z <- data3 %>% filter(Average_Hepatitis_B > 90)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Hepatitis_B = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Hepatitis_B = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Hepatitis_B = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Hepatitis_B, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Measles=mean(Measles))
+
+x <- data3 %>% filter(Average_Measles <= 77)
+y <- data3 %>% filter(Average_Measles > 77 & Average_Measles <= 1298)
+z <- data3 %>% filter(Average_Measles > 1298)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Measles = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Measles = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Measles = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Measles, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_BMI=mean(BMI))
+
+x <- data3 %>% filter(Average_BMI <= 26)
+y <- data3 %>% filter(Average_BMI > 26 & Average_BMI <= 50)
+z <- data3 %>% filter(Average_BMI > 50)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$BMI = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$BMI = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$BMI = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ BMI, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Total_Expenditure=mean(Total.expenditure))
+
+x <- data3 %>% filter(Average_Total_Expenditure <= 5)
+y <- data3 %>% filter(Average_Total_Expenditure > 5 & Average_Total_Expenditure <= 7)
+z <- data3 %>% filter(Average_Total_Expenditure > 7)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Total_Expenditure = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Total_Expenditure = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Total_Expenditure = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Total_Expenditure, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_HIV=mean(HIV.AIDS))
+
+x <- data3 %>% filter(Average_HIV <= 1)
+y <- data3 %>% filter(Average_HIV > 1 & Average_HIV <= 2)
+z <- data3 %>% filter(Average_HIV > 2)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$HIV = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$HIV = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$HIV = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ HIV, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_GDP=mean(GDP))
+
+x <- data3 %>% filter(Average_GDP <= 1430)
+y <- data3 %>% filter(Average_GDP > 1430 & Average_GDP <= 4905)
+z <- data3 %>% filter(Average_GDP > 4905)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$GDP = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$GDP = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$GDP = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ GDP, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Population=mean(Population))
+
+x <- data3 %>% filter(Average_Population <= 1362657)
+y <- data3 %>% filter(Average_Population > 1362657 & Average_Population <= 7145967)
+z <- data3 %>% filter(Average_Population > 7145967)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Population = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Population = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Population = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Population, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Thinness_1_19=mean(thinness..1.19.years))
+
+x <- data3 %>% filter(Average_Thinness_1_19 <= 2)
+y <- data3 %>% filter(Average_Thinness_1_19 > 2 & Average_Thinness_1_19 <= 6)
+z <- data3 %>% filter(Average_Thinness_1_19 > 6)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Thinness_1.19 = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Thinness_1.19 = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Thinness_1.19 = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Thinness_1.19, data=combined_g)
+summary(Anova_Results)
+```
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Thinness_5_9=mean(thinness.5.9.years))
+
+x <- data3 %>% filter(Average_Thinness_5_9 <= 2)
+y <- data3 %>% filter(Average_Thinness_5_9 > 2 & Average_Thinness_5_9 <= 7)
+z <- data3 %>% filter(Average_Thinness_5_9 > 7)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Thinness_5.9 = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Thinness_5.9 = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Thinness_5.9 = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Thinness_5.9, data=combined_g)
+summary(Anova_Results)
+```
+
+-   The Human Development Index (HDI) is a summary measure of average
+    achievement in key dimensions of human development: a long and
+    healthy life, being knowledgeable, and have a decent standard of
+    living. Using the sample, check if countries that spend a higher
+    proportion of their resources on human development have a higher
+    life expectancy?
+
+We will be using the ANOVA test to test the significance of Human
+Development Index (HDI) on life expectancy. Here we will categorize
+countries into one of the three categories: 'Low' (≤0.5), 'Medium'(\>0.5
+and ≤0.7), 'High' (\>0.7) depending upon the country's average schooling
+years.
+
+Firstly, we will group the data by country and find the average life
+expectancy and Income.composition.of.resources for each country over the
+16 years.
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Income_Decomposition_Resources=mean(Income.composition.of.resources))
+
+x <- data3 %>% filter(Average_Income_Decomposition_Resources <= 0.5)
+y <- data3 %>% filter(Average_Income_Decomposition_Resources > 0.5 & Average_Income_Decomposition_Resources <=0.7)
+z <- data3 %>% filter(Average_Income_Decomposition_Resources > 0.7)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Income_Decomposition_Resources=mea = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Income_Decomposition_Resources=mea = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Income_Decomposition_Resources=mea = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Income_Decomposition_Resources, data=combined_g)
+summary(Anova_Results)
+```
+
+As we can see, the countries with higher income composition of resources
+for human development have better life expectancy hence the p-value
+\<0.05. Thus countries should spend more on the human development to
+achieve higher life expectancy.
+
+-   Education creates awareness about healthy living. For example
+    Vaccine hesitancy during this Covid-19 period, especially among the
+    rural population, has highlighted the importance of education. Using
+    the sample, test whether schooling years (average) has a significant
+    impact on life expectancy?
+
+Which test to use?
+
+We will be using the ANOVA test to test the significance of education on
+life expectancy. Here we will categorize countries into one of the three
+categories: 'Low' (≤8), 'Medium'(\>8 and ≤12), 'High' (\>12) depending
+upon the country's average schooling years.
+
+```{r}
+data3 <- data %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Schooling=mean(Schooling))
+
+x <- data3 %>% filter(Average_Schooling <= 8)
+y <- data3 %>% filter(Average_Schooling > 8 & Average_Schooling <= 12)
+z <- data3 %>% filter(Average_Schooling > 12)
+y1 <- data.frame(Average_Life = x$Average_Life)
+y1$Education = 'Low'
+y2 <- data.frame(Average_Life = y$Average_Life)
+y2$Education = 'Middle'
+y3 <- data.frame(Average_Life = z$Average_Life)
+y3$Education = 'High'
+combined_g <- data.frame(rbind(y1, y2, y3))
+
+Anova_Results <- aov(Average_Life ~ Education, data=combined_g)
+summary(Anova_Results)
+```
+
+As we can see, all the tests return a p-value lower than 0.05, except
+the one for Population. This means that all the variables, except
+Population, have effect of Life Expectancy.
+
+-   In Covid-19 times we all have seen the importance of immunization
+    against the virus to increase life expectancy. Looking at the data,
+    can you show that immunization against Polio and Diphtheria has a
+    significant effect on life expectancy?
+
+We will use a two-way ANOVA test. Here we will divide the countries into
+two categories for both Polio and Diphtheria. Countries having values of
+% immunization coverage for one-year-old greater than the median value
+will get category 'High' else 'Low'.
+
+Step1: Countries with polio (mean) coverage for one-year-old ≤85 will
+get a label 'Low' else 'High'.
+
+Step2: Countries with Diphtheria(mean) coverage for one-year-old ≤85
+will get a label 'Low' else 'High'.
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Polio=mean(Polio), Average_Diphteria = mean(Diphtheria))
+
+x1 <- data3 %>% filter(Average_Polio <= 85)
+x2 <- data3 %>% filter(Average_Polio > 85)
+y1 <- data3 %>% filter(Average_Diphteria <= 85)
+y2 <- data3 %>% filter(Average_Diphteria > 85)
+a1 <- data.frame(Average_Life = x1$Average_Life, Country = x1$Country)
+a1$Polio = 'Low'
+a2 <- data.frame(Average_Life = x2$Average_Life, Country = x2$Country)
+a2$Polio = 'High'
+combined_g1 <- data.frame(rbind(a1,a2))
+
+
+b1 <- data.frame(Average_Life = y1$Average_Life, Country = y1$Country)
+b1$Diphtheria = 'Low'
+b2 <- data.frame(Average_Life = y2$Average_Life, Country = y2$Country)
+b2$Diphtheria = 'High'
+combined_g2 <- data.frame(rbind(b1,b2))
+
+
+df <- merge(combined_g1, combined_g2, by= "Country")
+Anova_Results <- aov(Average_Life.x ~ Polio+Diphtheria, data=df)
+summary(Anova_Results)
+
+
+```
+
+P-value for both Polio and Diphtheria immunization coverage for one-year
+old is less than 0.05, hence we can say that immunization has a
+significant impact on the life expectancy.
+
+-   We want to compare the proportions of infant deaths and under-five
+    deaths. Since we have observed a high correlation in the correlation
+    matrix, we would like to determine if there is a significant
+    difference between these two variables. Can we conclude that there
+    is a statistically significant difference between the proportions of
+    infant deaths and under-five deaths?
+
+We will conduct a two-proportions z-test to compare the two independent
+proportions. Firstly, we will group the data by country and then find
+the average life expectancy, infant deaths, and under-five deaths for
+each country.
+
+```{r}
+data3 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Infant_Deaths=mean(infant.deaths),Average_under_five_deaths=mean(under.five.deaths))
+
+countx <- ceiling(mean(data3$Average_Infant_Deaths))
+county <- ceiling(mean(data3$Average_under_five_deaths))
+
+arg1 <- c(countx, county)
+arg2 <- c(1000,1000)
+prop.test(arg1,arg2,correct= FALSE)
+
+```
+
+Since the p- value is greater than 0.05, we see no significant
+difference in the two independent proportions.
+
+-   Does life expectancy have a positive or negative correlation with
+    habits like drinking alcohol? Does the result point out any strong
+    conclusion?
+
+To assess the relationship between alcohol consumption and adult
+mortality rate, we can employ two approaches. First, we can create a
+scatter plot to visualize the data points and discern any potential
+correlation between the variables. Second, we can conduct a Pearson
+correlation test to quantitatively measure the correlation strength
+between alcohol consumption and adult mortality rate. By employing these
+methods, we can gain a deeper understanding of the association between
+these variables.
+
+```{r}
+data3 <- original_data_ver2%>%group_by(Country)%>%summarise(Average_Adult_Mortality=mean(Adult.Mortality),Average_Alcohol=mean(Alcohol))
+
+data2 <- original_data_ver2 %>% group_by(Country) %>%
+         summarize(Average_Life=mean(Life.expectancy), Average_Alcohol=mean(Alcohol))
+
+
+scatter.smooth(data3)
+scatter.smooth(data2)
+
+cor.test(data3$Average_Adult_Mortality,data3$Average_Alcohol, method = 'pearson')
+cor.test(data2$Average_Life,data3$Average_Alcohol, method = 'pearson')
+```
+
+The correlations between alcohol consumption and health indicators yield
+mixed results. While there is a positive correlation with life
+expectancy, there is a negative correlation with adult mortality rate.
+These correlations, however, are not strong enough to draw remarkable
+conclusions. Further research is needed to better understand the complex
+relationship between alcohol consumption and these health outcomes.
+
+## 3.2 Categorical Variables to Life Expectancy Comparison
+
+To answer the first question we need to see if any of the variables have
+effect on the life expectancy, we want to look at the categorical
+features first. We'll start with 'Status'.
+
+First we divide the dataset into developing countries and developed
+countries and for each country we compute the mean of the Life
+Expectancy values obtained through the years.
+
+```{r}
+library(dplyr)
+developing <- original_data %>% filter(original_data$Status=='Developing') %>% 
+  reframe(Average_Life=mean(Life.expectancy), .by=Country)
+developing
+```
+
+```{r}
+developed <- original_data %>% filter(original_data$Status=='Developed') %>% 
+  reframe(Average_Life=mean(Life.expectancy), .by=Country)
+developed
+```
+
+First we want to check if the variance of the developed countries is the
+same as the variance of the developing countries. For this we use a
+F-test.
+
+```{r  }
+var.test(developed$Average_Life, developing$Average_Life)
+```
+
+As we can see, the p-value is lower than 0.05, so reject the null
+hypothesis and accept the alternate hypothesis that the variances of two
+populations are different.
+
+Now we want to see if the developed countries have a higher average life
+expectancy than Developing countries. For this we use a two sample
+t-test.
+
+```{r}
+t.test(developed$Average_Life, developing$Average_Life, alternative="greater", var.equal = FALSE)
+```
+
+As we can see, the p-value is smaller than 0.05, so we reject the null
+hypothesis and accept the alternate hypothesis that the developed
+countries have a higher average life expectancy than the developing
+countries.
+
+Based on the result of the above t-test, there appears to be a very
+significant difference between 'Developing' and 'Developed' countries
+with respect to their Life Expectancy. Since this is the case, a
+comparison between the status variable and all other continuous
+variables should be made before moving to the feature engineering phase.
+
+--Status Variable Compared to other Continuous Variables--
+
+Since the status variable only contains two different values, it is
+likely best to compare a number of descriptive statistics for those two
+values with respect to all the other continuous variables.
+
+```{r}
+developed_df <- original_data[(original_data$Status == 'Developed'), ]
+developing_df <- original_data[ (original_data$Status == 'Developing'), ]
+
+interested_vars <- c("Life.expectancy","Adult.Mortality","infant.deaths","Alcohol","percentage.expenditure","Measles","under.five.deaths","Hepatitis.B","HIV.AIDS","BMI","Polio","Total.expenditure","Diphtheria","GDP","Population","thinness..1.19.years","thinness.5.9.years","Income.composition.of.resources","Schooling")
+aggregate(original_data[, interested_vars], by = list(original_data$Status), FUN = mean)
+
+for (col in interested_vars) {
+  cat(rep("-", 5), col, "Developed/Developing t-test comparison", rep("-", 5), "\n")
+  t_test_result <- t.test(developed_df[[col]], developing_df[[col]], var.equal = FALSE)
+  cat("p-value =", t_test_result$p.value, "\n")
+  cat("\n")
+}
+
+```
+
+| Variable                        |       p-value |
+|---------------------------------|--------------:|
+| Life.expectancy                 | 9.013849e-314 |
+| Adult.Mortality                 | 1.249538e-164 |
+| infant.deaths                   |  7.347845e-37 |
+| Alcohol                         | 9.458846e-192 |
+| percentage.expenditure          |  9.887803e-38 |
+| Measles                         |  1.717022e-16 |
+| under.five.deaths               |  1.596958e-38 |
+| Hepatitis.B                     |  9.284856e-18 |
+| HIV.AIDS                        |  3.950474e-61 |
+| BMI                             |  6.883171e-65 |
+| Polio                           |  8.299911e-75 |
+| Total.expenditure               |  3.593352e-36 |
+| Diphtheria                      |  1.851033e-62 |
+| GDP                             |  5.671048e-06 |
+| Population                      |     0.2783308 |
+| thinness..1.19.years            | 2.116436e-301 |
+| thinness.5.9.years              | 2.732105e-296 |
+| Income.composition.of.resources | 1.006483e-303 |
+| Schooling                       | 7.433698e-206 |
+
+Based on the results, it is evident that there are significant
+differences between the following variables concerning a country's
+status. This conclusion is drawn as none of the calculated p-values
+exceed 0.5.
+
+----Life expectancy over the years----
+
+We aim to investigate the trend of life expectancy over the years.
+
+```{r}
+# Calculate the mean life expectancy by year
+mean_df <- aggregate(Life.expectancy ~ Year, data = original_data, FUN = mean)
+
+ggplot(data = mean_df, aes(x = Year, y = Life.expectancy)) +
+  geom_line() +
+  geom_point(shape = "o") +
+  labs(title = "Life Expectancy over Years") +
+  scale_y_continuous(breaks = mean_df$Life.expectancy)+
+  scale_x_continuous(breaks = mean_df$Year)
+```
+
+While there appears to be a positive correlation between life expectancy
+and the passage of years, it is essential to determine whether the
+differences observed between each year are statistically significant.
+Are these differences substantial enough to consider them meaningful
+variations in life expectancy?
+
+```{r  , include=FALSE}
+# Get the unique years from the dataframe
+unique_years <- unique(mean_df$Year)
+
+# Create an empty vector to store the p-values
+p_values <- vector()
+
+# Iterate over the years
+for (i in 1:(length(unique_years) - 1)) {
+  year1 <- unique_years[i]
+  year2 <- unique_years[i+1]
+  
+  # Subset the data for the corresponding years
+  data_year1 <- data$Life.expectancy[data$Year == year1]
+  data_year2 <- data$Life.expectancy[data$Year == year2]
+  
+  # Perform t-test between the two years
+  result <- t.test(data_year1, data_year2)
+  
+  # Extract the p-value
+  p_value <- result$p.value
+  
+  # Append the p-value to the vector
+  p_values <- append(p_values, p_value)
+  
+  # Print the p-values
+  cat(rep("-", 10), year1, " to ", year2, rep("-", 10), "\n")
+  cat("P-value: ",p_value, "\n")
+  cat("\n")
+}
+
+
+
+```
+
+| Time Period  |   P-value |
+|--------------|----------:|
+| 2000 to 2001 | 0.7413284 |
+| 2001 to 2002 | 0.8458235 |
+| 2002 to 2003 |  0.949058 |
+| 2003 to 2004 | 0.7579069 |
+| 2004 to 2005 | 0.6189956 |
+| 2005 to 2006 | 0.6110444 |
+| 2006 to 2007 | 0.7044814 |
+| 2007 to 2008 |  0.813566 |
+| 2008 to 2009 | 0.6288716 |
+| 2009 to 2010 | 0.8541843 |
+| 2010 to 2011 | 0.5278882 |
+| 2011 to 2012 | 0.7830066 |
+| 2012 to 2013 | 0.7871843 |
+| 2013 to 2014 | 0.7159781 |
+| 2014 to 2015 | 0.9554911 |
+
+Based on the results of the conducted t-tests, the p-values obtained for
+all comparisons between consecutive years are greater than 0.05,
+indicating that there is no significant evidence to support the presence
+of substantial differences in Life Expectancy between these years.
+
+# 4. Models selection and their comparison
+
+To apply linear regression we need to make sure that four conditions are
+satisfied:
+
+1.  No multicollinearity: no high correlation between the independent
+    variables;
+2.  Linearity: there must be a linear relationship between the target
+    variable (Life Expectancy) and the other variables;
+3.  Normality: the residuals must be normally distributed;
+4.  Homoscedasticity: the residuals must have a constant variance;
+
+The first condition is already satisfied as we already removed the
+variables 'infant.deaths', 'under.five.deaths', 'GDP' and
+'thinness..1.19.years', which are the variables that have a higher VIF
+value, so the ones with strong collinearity.
+
+We start by building the linear model
+
+```{r  }
+model <- lm(Life.expectancy ~ Adult.Mortality
+             + Status
+             + Alcohol
+             + percentage.expenditure
+             + Hepatitis.B
+             + Measles
+             + BMI
+             + Polio
+             + Total.expenditure
+             + Diphtheria
+             + HIV.AIDS
+             + Population
+             + thinness..1.19.years
+             + Income.composition.of.resources
+             + Schooling,
+            data = data_EDA)
+summary(model)
+```
+
+We should preface this by saying that we don't have to prove the four
+assumptions are "perfectly met", but we need to see to which extent they
+are violated and see if we can get results that can be considered
+satisfying.
+
+We start by checking the second condition and we do it by producing the
+Residuals vs Fitted plot.
+
+```{r  }
+plot(model, 1)
+```
+
+To say that we have linearity the points should be evenly distributed
+between the two sides of the line and the red line should be
+approximately horizontal at zero and. The presence of a pattern may
+indicate a problem with some aspect of the linear model.
+
+In our case, there is no pattern in the residual plot. This means that
+we can assume linear relationship between the predictors and the outcome
+variables.
+
+Let's now check the third condition.
+
+```{r  }
+plot(model, 2)
+```
+
+Looking at the Q-Q plot above, we see that most of the points are
+located on the diagonal line, except the extremes, which deviate from
+the line, therefore, this Q-Q plot is inconclusive regarding the
+normality of the residuals. So we need to find another way to check if
+the normality condition is met, let's try by plotting the histogram of
+the residuals.
+
+```{r  }
+ols_plot_resid_hist(model)
+```
+
+The histogram shows that most of the residuals fall around zero and the
+number of observations in the tails (so the extremes) of the histogram
+is low. We can conclude that residuals of our regression model follow a
+normal distribution.
+
+Let's now check the last condition. To check this homoscedasticity
+assumption we can use the Breusch-Pagan test.
+
+```{r  }
+# Load the lmtest package
+bptest(model)
+```
+
+As we can see, p \<0.05 so there is evidence that the principle of
+Homoscedasticity is not fulfilled. When the principle of
+Homoscedasticity is not fulfilled, the estimate of the mean made by the
+model will continue to be good, but its confidence intervals will not.
+
+We can also see to which extent the Homoscedasticity is violated by
+looking at the Scale-Location plot.
+
+```{r  }
+plot(model, 3)
+```
+
+This plot shows if residuals are spread equally along the ranges of
+predictors, so we need to get a line which is close to being horizontal
+with equally spread points, which is our case. This means that the
+Homoscedasticity is violated but not to a large extent.
+
+```{r}
+durbinWatsonTest(model)
+```
+
+From the output obtained above, we can see that the test statistic is
+0.7066183 and the corresponding p value is 0. Since, the p-value is less
+than 0.05, we reject the null hypothesis and conclude that the residuals
+are auto correlated. Also, the value of D-W statistic is approx. 0.7
+which is close to 0 showing high chances of high positive
+autocorrelation.
+
+In the next section, we will focus on feature selection, where we aim to
+identify the optimal set of variables for our analysis.
+
+## 4.1 Feature Selection
+
+```{r  }
+data_EDA$Status <- as.factor(data_EDA$Status)
+data <- as.data.frame(scale(subset(data_EDA,select = -c(Status,Year)), scale=TRUE, center = TRUE))
+data$Status <- data_EDA$Status
+
+```
+
+Feature selection is a crucial step in constructing models as it
+involves identifying a subset of relevant features from a larger
+dataset. In this report, we explore the process of variable selection on
+a life expectancy dataset using various methods such as best subset,
+forward inclusion, and backward elimination. Additionally, we utilize
+four metrics, including residual sum of squares (rss), adjusted R\^2
+(adjr2), Mallow's Cp (cp), and Bayesian information criterion (bic), to
+determine the most relevant subset of variables. By examining the
+differences in the number of selected features across these criteria, we
+can determine which criterion yields a more parsimonious model. we aim
+to identify the criteria that best align with our goal of selecting a
+subset of features that captures the essential information while
+minimizing redundancy. Ultimately, this enables us to construct a robust
+and interpretable model for predicting life expectancy.
+
+We will use 3 regression subset methods to come up with the most
+relevant subset of features namely:
+
+-   Forward Selection: We begin with an empty model and iteratively add
+    the most significant feature based on the chosen criterion (BIC, Cp,
+    or adjusted R\^2) until a stopping condition is met.
+
+-   Backward Selection: We start with all features and iteratively
+    remove the least significant feature based on the selected criterion
+    until a stopping condition is met.
+
+-   Mixed Selection: This method combines forward and backward
+    selection, iteratively adding and removing features based on the
+    chosen criterion until a stopping condition is satisfied.
+
+```{r  }
+library("leaps")
+
+# Best Subset Selection
+###########################
+
+# The regsubsets() function (part of the leaps library) 
+# performs best subset selection by identifying the best 
+# model that contains a given number of predictors, 
+# where best is quantified using RSS. The syntax is the 
+# same as for lm(). The summary() command outputs 
+# the best set of variables for each model size.
+
+# install library(leaps)
+regfit.best <- regsubsets(Life.expectancy~., data= data, nvmax = 16)
+reg.summary <- summary(regfit.best)
+
+
+par(mfrow=c(2,2))
+
+
+#- residual sum of squares:
+plot(reg.summary$rss,xlab="Number of Variables",ylab="RSS",type="l")
+#which.min(reg.summary$rss)
+points(which.min(reg.summary$rss),reg.summary$rss[16], col="red",cex=2,pch=20)
+best_subset <- summary(regfit.best)$which[which.min(reg.summary$rss), ]
+
+
+
+# adjusted-R^2 with its largest value
+plot(reg.summary$adjr2,xlab="Number of Variables",ylab="Adjusted Rsq",type="l")
+#which.max(reg.summary$adjr2)
+points(which.max(reg.summary$adjr2),reg.summary$adjr2[15], col="red",cex=2,pch=20)
+best_subset <- summary(regfit.best)$which[which.max(reg.summary$adjr2), ]
+
+
+
+# Mallow's Cp with its smallest value
+plot(reg.summary$cp,xlab="Number of Variables",ylab="Cp",type='l')
+#which.min(reg.summary$cp)
+points(which.min(reg.summary$cp),reg.summary$cp[13],col="red",cex=2,pch=20)
+best_subset <- summary(regfit.best)$which[which.min(reg.summary$cp), ]
+
+
+
+# BIC with its smallest value
+plot(reg.summary$bic,xlab="Number of Variables",ylab="BIC",type='l')
+#which.min(reg.summary$bic)
+points(which.min(reg.summary$bic),reg.summary$bic[12],col="red",cex=2,pch=20)
+best_subset <- summary(regfit.best)$which[which.min(reg.summary$bic), ]
+
+
+
+
+
+```
+
+The different metrics used to evaluate the best subsets of variables
+provided varying recommendations:
+
+-   RSS: 16 variables
+
+-   adjr2: 16 variables
+
+-   Cp: 15 variables
+
+-   BIC: 13 variables.
+
+Based on these metrics, we have decided to prioritize the BIC as the
+criterion for selecting the best subset. This is because the BIC tends
+to penalize models with a larger number of variables more heavily. As a
+result, the BIC generally favors smaller models compared to Cp and AIC.
+In this analysis, we specifically exclude the AIC criterion since Cp and
+AIC yield equivalent results in terms of selecting the same model.
+Therefore, by considering the BIC metric, we can achieve a balance
+between model complexity and goodness of fit, resulting in the selection
+of a subset with a minimum number of variables, as anticipated.
+
+```{r  }
+
+# Perform variable selection using regression subset methods
+regfit.best <- regsubsets(Life.expectancy ~ ., data = data, nvmax = 16)
+
+# Summarize the results
+reg.summary <- summary(regfit.best)
+
+# Display the R-squared statistics for each subset
+#reg.summary$rsq
+
+par(mfrow= c(1,2))
+
+par(cex.axis = 0.6)  
+# Plot the R-squared, adjusted R-squared, Cp, and BIC values
+plot(regfit.best, scale = "r2", main = "R-squared", xlab = "Number of Predictors", ylab = "R-squared",col = "#13527a", pch = 2, cex.axis = 0.1)  
+# Customize color, symbol, and axis labels
+# Add a legend explaining the symbols
+legend("topright", legend = "Models", pch =2, col = "#13527a", bty = "n")
+
+plot(regfit.best, scale = "adjr2", main ="adjr2", xlab = "Number of Predictors", ylab = "Adjr2",col = "#13527a", pch = 2, cex.axis = 0.8)  
+# Customize color, symbol, and axis labels
+# Add a legend explaining the symbols
+legend("topright", legend = "Models", pch = 2, col = "#13527a", bty = "n")
+
+par(mfrow= c(1,2))
+plot(regfit.best, scale = "Cp", main = "Cp", xlab = "Number of Predictors", ylab = "Cp",col = "#13527a", pch = 2, cex.axis = 0.8)  
+# Customize color, symbol, and axis labels
+# Add a legend explaining the symbols
+legend("topright", legend = "Models", pch = 2, col = "#13527a", bty = "n")
+
+
+plot(regfit.best, scale = "bic", main = "BIC", xlab = "Number of Predictors", ylab = "BIC",col = "#13527a", pch = 2, cex.axis = 0.8)  
+# Customize color, symbol, and axis labels
+# Add a legend explaining the symbols
+legend("topright", legend = "Models", pch = 2, col = "#13527a", bty = "n")
+
+par(cex.axis = 0.6)  
+
+```
+
+We generate visualizations to compare the performance of different
+subsets based on the R-squared, adjusted R-squared, Cp, and BIC metrics.
+Each plot represents the number of predictors on the x-axis and the
+respective metric on the y-axis. Metrices values for different
+combinations of predictor variables in a multivariate regression model.
+Each row of the figure has black boxes (the variable is used in the
+model) and white boxes (the variable is not used) and it represents a
+separate multivariate model with its own metrice value.
+
+Conclusion: Through the application of regression subset methods, we
+successfully perform variable selection and evaluate the model
+performance using multiple metrics. The plots assist in understanding
+the impact of different subsets on model fit, while the coefficient
+analysis sheds light on the significance of predictors in explaining
+life expectancy. These findings contribute to the development of a
+robust and interpretable model for predicting life expectancy based on
+the available dataset.
+
+```{r  }
+par(mfrow= c(1,3))
+regfit.fwd <- regsubsets(Life.expectancy~.,data=data,nvmax=16,method="forward")
+fwd.summary <-summary(regfit.fwd)
+
+# fwd.summary
+set_plot_dimensions(8,6)
+plot(fwd.summary$bic,xlab="Number of Variables",ylab="BIC",type='l')
+#which.min(fwd.summary$bic)
+points(13,fwd.summary$bic[13],col="red",cex=2,pch=20)
+
+
+regfit.bwd <- regsubsets(Life.expectancy~.,data=data,nvmax=16,method="backward")
+bwd.summary <-summary(regfit.fwd)
+
+# bwd.summary
+set_plot_dimensions(8,6)
+plot(bwd.summary$bic,xlab="Number of Variables",ylab="BIC",type='l')
+#which.min(bwd.summary$bic)
+points(13,bwd.summary$bic[13],col="red",cex=2,pch=20)
+
+regfit.mix <- regsubsets(Life.expectancy ~., data = data, nvmax = 16, method = "seqrep")
+mix.summary <- summary(regfit.mix)
+
+plot(mix.summary$bic, xlab = "Number of Variables", ylab = "BIC", type = 'l')
+#which.min(mix.summary$bic)
+points(which.min(mix.summary$bic), mix.summary$bic[which.min(mix.summary$bic)], col = "red", cex = 2, pch = 20)
+
+cat("Number of Optimal Features by forward selection:",which.min(fwd.summary$bic),"\n")
+cat("Number of Optimal Features by backward selection:",which.min(bwd.summary$bic),"\n")
+cat("Number of Optimal Features by mixed techniques:",which.min(mix.summary$bic),"\n")
+
+```
+
+The feature selection analysis, incorporating forward, backward, and
+mixed techniques, consistently identifies 13 features as the optimal
+subset for building a predictive model. These selected features showcase
+their importance in accurately predicting the target variable, enhancing
+the model's performance and interpretability. By focusing on these 12
+features, we can create a streamlined and efficient model that avoids
+unnecessary complexity and reduces the risk of overfitting.
+Additionally, we examine the selected variables and their coefficients
+for each method to gain further insights into the model's behavior.
+
+```{r  }
+par(mfrow = c(3,1))
+v_names <- rownames(as.data.frame(coef(regfit.best,13)))
+coefs<- data.frame(v_names)
+coefs$best_coef_value<- coef(regfit.mix,13)
+coefs$fwd_coef_value <-  coef(regfit.fwd,13)
+coefs$bwd_coef_value <-  coef(regfit.bwd,13)
+
+set_plot_dimensions(18,16)
+ggplot(coefs,
+       aes(x=v_names, y=best_coef_value, fill=best_coef_value)) +
+                                  geom_bar(stat="identity") +
+                                  ggtitle("Features & coeffecients: [method Best]") +
+                                  xlab("Feature") + ylab("Coef value") +
+                                  theme(axis.text.x=element_text(angle=20, hjust=1))+
+                                  theme(text = element_text(size = 10))
+
+ggplot(coefs,
+       aes(x=v_names, y=fwd_coef_value, fill=fwd_coef_value)) +
+                                  geom_bar(stat="identity") +
+                                  ggtitle("Features & coeffecients: [method Forward inclusion]") +
+                                  xlab("Feature") + ylab("Coef value") +
+                                  theme(axis.text.x=element_text(angle=20, hjust=1))+
+                                  theme(text = element_text(size = 10))
+ggplot(coefs,
+       aes(x=v_names, y=bwd_coef_value, fill=bwd_coef_value)) +
+                                  geom_bar(stat="identity") +
+                                  ggtitle("Feature & coeffecients: [method Backward elimination]") +
+                                  xlab("Feature") + ylab("Coef value") +
+                                  theme(axis.text.x=element_text(angle=20, hjust=1))+
+                                  theme(text = element_text(size = 10))
+```
+
+Overall, when the forward, backward, and mixed methods yield the same
+coefficients for specific variables, it strengthens the evidence for the
+importance and reliability of those variables in predicting the target
+variable. It provides consistency, stability, and confidence in the
+selected features, which are crucial for building effective and
+interpretable regression models.
+
+```{r  }
+data_VS <- subset(data, select=c(Life.expectancy,Adult.Mortality, Hepatitis.B, BMI, 
+Diphtheria,HIV.AIDS,Income.composition.of.resources, Measles,percentage.expenditure, Polio, Schooling,Status,thinness..1.19.years, Total.expenditure))
+
+
+```
+
+## 4.2 Model data
+
+Initially, we apply a simple linear model to the dataset using selected
+features. We then compare the results obtained from this model with
+those of a linear model trained on the entire set of features.
+Subsequently, we explore the use of ridge regression and lasso
+regression models, incorporating shrinkage parameters, to observe any
+differences in the outcomes.
+
+### 4.2.1 Simple linear model on selected features
+
+```{r  }
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_VS), replace=TRUE, prob=c(0.70,0.30))
+train <- data_VS[sample, ]
+x.test <-data_VS[!sample, ]
+y.test <- data_VS[!sample, ]$Life.expectancy
+model.VS <- lm(Life.expectancy~., data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(model.VS)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = names(coefs)[-1], coefficient = coefs[-1])
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Linear Model with Feature Selection Methods") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+
+```
+
+```{r  }
+pred <- predict(model.VS, newdata=x.test)
+lmRSS <- pred - y.test
+cat("RMSE: ",rmse(pred,y.test))
+summary(model.VS)
+par(mfrow=c(2,2))
+plot(model.VS)
+```
+
+### 4.2.2 Simple linear model on whole features
+
+```{r  }
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_EDA), replace=TRUE, prob=c(0.70,0.30))
+train <- data_EDA[sample, ]
+x.test <-data_EDA[!sample, ]
+y.test <- data_EDA[!sample, ]$Life.expectancy
+model.EDA <- lm(Life.expectancy~., data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs_EDA <- coef(model.EDA)
+
+# Convert the coefficients to a data frame for plotting
+coefs_EDA <- data.frame(variable = names(coefs_EDA)[-1], coefficient = coefs_EDA[-1])
+coefs_EDA$variable <- factor(coefs_EDA$variable, levels = coefs_EDA$variable)
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_EDA, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Linear Model with all the features") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+
+
+```
+
+```{r  }
+predEDA <- predict(model.EDA, newdata=x.test)
+lmRSSEDA <- predEDA - y.test
+cat("RMSE",rmse(predEDA,y.test))
+summary(model.EDA)
+par(mfrow=c(2,2))
+plot(model.EDA)
+```
+
+#### Simple Linear Model Results
+
+| Model         | R-squared | Adjusted R-squared | Mean Squared Error |
+|---------------|-----------|--------------------|--------------------|
+| Reduced Model | 0.7877    | 0.7864             | 0.4600969          |
+| Full Model    | 0.789     | 0.7872             | 0.4601041          |
+
+### 4.2.3 Ridge Regression Model
+
+```{r  }
+
+
+# Split the dataset into training and testing sets
+set.seed(123) # For reproducibility
+sample1 <- sample(c(TRUE, FALSE), nrow(data_VS), replace=TRUE, prob=c(0.70,0.30))
+sample2 <- sample(c(TRUE, FALSE), nrow(data_EDA), replace=TRUE, prob=c(0.70,0.30))
+
+train <- data_VS[sample1, ]
+x.test <-data_VS[!sample1, ]
+y.test <- data_VS[!sample1, ]$Life.expectancy
+
+trainEDA <- data_EDA[sample2, ]
+x.testEDA <-data_EDA[!sample2, ]
+y.testEDA <- data_EDA[!sample2, ]$Life.expectancy
+
+
+# Create a matrix of predictors and target variable for training
+x_train <- model.matrix(Life.expectancy~.,train)
+x_train <- x_train[,-1]
+y_train <- train$Life.expectancy
+
+x_trainEDA <- model.matrix(Life.expectancy~.,trainEDA)
+x_trainEDA <- x_trainEDA[,-1]
+y_trainEDA <- trainEDA$Life.expectancy
+
+
+# Perform cross-validation to find the best lambda value
+cv_model <- cv.glmnet(x_train, y_train, family = "gaussian", alpha = 0,nfolds = 10, standardize = TRUE, intercept = FALSE) # Use 10-fold
+
+# Perform cross-validation to find the best lambda value
+cv_modelEDA <- cv.glmnet(x_trainEDA, y_trainEDA, family = "gaussian", alpha = 0,nfolds = 10, standardize = TRUE, intercept = FALSE) # Use 10-fold
+
+
+# Identify the best lambda value
+best_lambda <- cv_model$lambda.min
+
+# Identify the best lambda value
+best_lambdaEDA <- cv_modelEDA$lambda.min
+
+
+# Train the final ridge regression model with the best lambda value
+final_model <- glmnet(x_train, y_train, alpha = 0)
+reg_model <- glmnet(x_train, y_train, alpha = 0, lambda = best_lambda, family = "gaussian", standardize = TRUE, intercept = FALSE)
+
+# Train the final ridge regression model with the best lambda value
+final_modelEDA <- glmnet(x_trainEDA, y_trainEDA, alpha = 0)
+reg_modelEDA <- glmnet(x_trainEDA, y_trainEDA, alpha = 0, lambda = best_lambdaEDA, family = "gaussian", standardize = TRUE, intercept = FALSE)
+
+
+# Create a matrix of predictors and target variable for testing
+x_test <- model.matrix(Life.expectancy~.,x.test)
+x_test <- x_test[,-1]
+y_test <- y.test
+
+# Create a matrix of predictors and target variable for testing
+x_testEDA <- model.matrix(Life.expectancy~.,x.testEDA)
+x_testEDA <- x_testEDA[,-1]
+y_testEDA <- y.testEDA
+
+
+# Make predictions using the final model
+predictions <- predict(reg_model, newx = x_test, s = best_lambda)
+
+# Make predictions using the final model
+predictionsEDA <- predict(reg_modelEDA, newx = x_testEDA, s = best_lambdaEDA)
+
+
+# Evaluate the model's performance on the testing set
+rss <- sum((y_test - predictions)^2)
+mse <- mean((y_test - predictions)^2)
+tss <- sum((y_test - mean(y_test))^2)
+rsquared <- 1 - rss/tss
+
+
+mseEDA <- mean((predictionsEDA - y_testEDA)^2)
+rssEDA <- sum((predictionsEDA - y_testEDA)^2)
+tssEDA <- sum((y_testEDA - mean(y_testEDA))^2)
+rsquaredEDA <- 1 - rssEDA/tssEDA
+
+regridgeRSSEDA <- y_testEDA - predictionsEDA
+regridgeRSS <- y_test - predictions
+
+
+#Computing Adjusted R^2
+
+# Calculate the number of predictors
+num_predictors <- sum(coef(reg_model, s = reg_model$lambda.min) != 0)
+# Calculate the number of observations
+num_observations <- length(y_test)
+
+# Calculate adjusted R-squared
+adjusted_r_squared <- 1 - (1 - rsquared) * ((num_observations - 1) / (num_observations - num_predictors - 1))
+
+# Calculate the number of predictors
+num_predictorsEDA <- sum(coef(reg_modelEDA, s = reg_modelEDA$lambda.min) != 0)
+# Calculate the number of observations
+num_observationsEDA <- length(y_testEDA)
+
+# Calculate adjusted R-squared
+adjusted_r_squaredEDA <- 1 - (1 - rsquaredEDA) * ((num_observationsEDA - 1) / (num_observationsEDA - num_predictorsEDA - 1))
+
+
+
+# Print the evaluation metrics
+#cat("Mean Squared Error for Reduced Model:", mse, "\n")
+#cat("R-squared for Reduced Model:", rsquared, "\n")
+#cat("AdjustedR^2 for Reduced Model:", adjusted_r_squared, "\n")
+
+
+# plot method for glmnet
+plot(cv_model)
+abline(v=cv_model$lambda.min, lty=3, lwd=2, col="red")
+
+plot(final_model, xvar="lambda", label=TRUE)
+abline(v=cv_model$lambda.min, lty=3, lwd=2, col="red")
+
+# Print the evaluation metrics
+#cat("Mean Squared Error for Full Model:", mseEDA, "\n")
+#cat("R-squared for Full Model:", rsquaredEDA, "\n")
+#cat("AdjustedR^2 for Reduced Model:", adjusted_r_squaredEDA, "\n")
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(reg_model)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = rownames(coefs)[-1], coefficient = coefs[-1])
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+
+EDA_coefs <- coef(reg_modelEDA)
+
+# Convert the coefficients to a data frame for plotting
+EDAcoefs_df <- data.frame(variable = rownames(EDA_coefs)[-1], coefficient = EDA_coefs[-1])
+EDAcoefs_df$variable <- factor(EDAcoefs_df$variable, levels = EDAcoefs_df$variable)
+
+
+par(mfrow=c(2,1))
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Selected Variables", y = "Coefficient", title = "Coefficients of Ridge Regression Reduced Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+
+# Plot the coefficients using a bar plot
+ggplot(EDAcoefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "All Variables", y = "Coefficient", title = "Coefficients of Linear Regression Full Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple"))
+
+f_test <- var.test((y_test - predictions) , (predictionsEDA - y_testEDA))
+print(f_test )
+
+```
+
+##### Comparison of Variances between Reduced Model and Full Model
+
+The F-test was conducted to compare the variances of the reduced model
+and full model. The test yielded an F-statistic of 1.026519., with a
+p-value of 0.7041. The results indicate that there are no significant
+differences in variances between the two models. Therefore, we conclude
+that the variances observed are likely due to random variation.
+
+#### Ridge Regression Model Results
+
+| Model         | Mean Squared Error | R-squared | Adjusted R-squared |
+|---------------|--------------------|-----------|--------------------|
+| Reduced Model | 0.214421           | 0.7877608 | 0.7844604          |
+| Full Model    | 0.2100862          | 0.7958114 | 0.7915834          |
+
+### 4.2.4 Lasso Regression Model
+
+```{r  }
+
+# Perform cross-validation to find the best lambda value
+cv_model <- cv.glmnet(x_train, y_train,family = "gaussian", alpha = 1,nfolds = 10, standardize = TRUE, intercept = FALSE) # Use 10-fold
+
+cv_modelEDA <- cv.glmnet(x_trainEDA, y_trainEDA,family = "gaussian", alpha = 1,nfolds = 10, standardize = TRUE, intercept = FALSE) # Use 10-fold
+
+
+# Identify the best lambda value
+i.bestlam <- which.min(cv_model$cvm)
+bestlam <- cv_model$lambda[i.bestlam]
+
+
+# Identify the best lambda value
+i.bestlamEDA <- which.min(cv_model$cvm)
+bestlamEDA <- cv_modelEDA$lambda[i.bestlamEDA]
+
+
+
+
+# Train the final loss regression model with the best lambda value
+final_model <- glmnet(x_train, y_train, alpha = 1)
+loss_model <- glmnet(x_train, y_train, alpha = 1, lambda = bestlam,family = "gaussian",standardize = TRUE, intercept = FALSE)
+
+# Train the final loss regression model with the best lambda value
+final_modelEDA <- glmnet(x_trainEDA, y_trainEDA, alpha = 1)
+loss_modelEDA <- glmnet(x_trainEDA, y_trainEDA, alpha = 1, lambda = bestlamEDA,family = "gaussian",standardize = TRUE, intercept = FALSE)
+
+
+
+# Make predictions using the final model
+predictions <- predict(loss_model, newx = x_test,s=bestlam)
+
+predictionsEDA <- predict(loss_modelEDA, newx = x_testEDA,s=bestlamEDA)
+
+
+# Evaluate the model's performance on the testing set
+
+rss <- sum((y_test - predictions)^2)
+mse <- mean((y_test - predictions)^2)
+tss <- sum((y_test - mean(y_test))^2)
+rsquared <- 1 - rss/tss
+
+LossRSSEDA <- y_testEDA - predictionsEDA
+LossRSS <- y_test - predictions
+mseEDA <- mean((predictionsEDA - y_testEDA)^2)
+rssEDA <- sum((predictionsEDA - y_testEDA)^2)
+tssEDA <- sum((y_testEDA - mean(y_testEDA))^2)
+rsquaredEDA <- 1 - rssEDA/tssEDA
+
+
+#Computing Adjusted R^2
+
+# Calculate the number of predictors
+num_predictors <- sum(coef(loss_model, s = loss_model$lambda.min) != 0)
+# Calculate the number of observations
+num_observations <- length(y_test)
+
+# Calculate adjusted R-squared
+adjusted_r_squared <- 1 - (1 - rsquared) * ((num_observations - 1) / (num_observations - num_predictors - 1))
+
+# Calculate the number of predictors
+num_predictorsEDA <- sum(coef(loss_modelEDA, s = loss_modelEDA$lambda.min) != 0)
+# Calculate the number of observations
+num_observationsEDA <- length(y_testEDA)
+
+# Calculate adjusted R-squared
+adjusted_r_squaredEDA <- 1 - (1 - rsquaredEDA) * ((num_observationsEDA - 1) / (num_observationsEDA - num_predictorsEDA - 1))
+
+
+# Print the evaluation metrics
+#cat("Mean Squared Error for Reduced Model:", mse, "\n")
+#cat("R-squared for Reduced Model:", rsquared, "\n")
+#cat("AdjustedR^2 for Reduced Model:", adjusted_r_squared, "\n")
+# plot method for glmnet
+#  xvar = c("norm", "lambda", "dev")
+plot(cv_model)
+abline(v=log(bestlam), lty=3, lwd=2, col="red")
+
+
+# Print the evaluation metrics
+#cat("Mean Squared Error for Full Model:", mseEDA, "\n")
+#cat("R-squared for Full Model:", rsquaredEDA, "\n")
+#cat("AdjustedR^2 for Full Model:", adjusted_r_squaredEDA, "\n")
+
+
+plot(final_modelEDA, xvar="lambda", label=TRUE)
+abline(v=log(bestlamEDA), lty=3, lwd=2, col="red")
+
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(loss_model)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = rownames(coefs)[-1], coefficient = coefs[-1])
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+
+# Get the coefficient values from the optimized model
+coefsEDA <- coef(loss_modelEDA)
+
+# Convert the coefficients to a data frame for plotting
+coefs_dfEDA <- data.frame(variable = rownames(coefsEDA)[-1], coefficient = coefsEDA[-1])
+coefs_dfEDA$variable <- factor(coefs_dfEDA$variable, levels = coefs_dfEDA$variable)
+
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Selected Variable", y = "Coefficient", title = "Coefficients of Lasso Regression  Reduced Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_dfEDA, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "All Variables", y = "Coefficient", title = "Coefficients of Linear Regression Full Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple"))
+
+f_test <- var.test((y_test - predictions) , (predictionsEDA - y_testEDA))
+print(f_test )
+
+
+```
+
+##### Comparison of Variances between Reduced Model and Full Model
+
+The F-test was conducted to compare the variances of the reduced model
+and full model. The test yielded an F-statistic of 1.0331, with p-value
+of 0.6365. The results indicate that there are no significant
+differences in variances between the two models. Therefore, we conclude
+that the variances observed are likely due to random variation.
+
+#### Lasso Regression Model Results
+
+| Model         | Mean Squared Error | R-squared | Adjusted R-squared |
+|---------------|--------------------|-----------|--------------------|
+| Reduced Model | 0.2139883          | 0.7881891 | 0.7848954          |
+| Full Model    | 0.2082843          | 0.7975627 | 0.793371           |
+
+### 4.2.5 Polynomial Regression model
+
+##### Polynomial Regression model on selected features
+
+```{r}
+# Load the required library
+
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_VS), replace=TRUE, prob=c(0.70,0.30))
+train <- data_VS[sample, ]
+x.test <-data_VS[!sample, ]
+y.test <- data_VS[!sample, ]$Life.expectancy
+
+# Load the required library
+library(dplyr)
+
+# Fit a polynomial regression model
+degree <- 3  # Degree of the polynomial
+model.pol.VS <- lm(Life.expectancy ~ poly(Adult.Mortality, degree, raw = TRUE) +
+             poly(Hepatitis.B, degree, raw = TRUE) + poly(BMI, degree, raw = TRUE) +
+             poly(Diphtheria, degree, raw = TRUE) + poly(HIV.AIDS, degree, raw = TRUE) +
+             poly(Income.composition.of.resources, degree, raw = TRUE) +
+             poly(Measles, degree, raw = TRUE) + poly(percentage.expenditure, degree, raw = TRUE) +
+             poly(Polio, degree, raw = TRUE) + poly(Schooling, degree, raw = TRUE) +
+             poly(Status, 1 , raw = TRUE) + poly(thinness..1.19.years, degree, raw = TRUE) +
+             poly(Total.expenditure, degree, raw = TRUE), data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(model.pol.VS)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = names(coefs)[-1], coefficient = coefs[-1])
+
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+transform_variable <- function(variable) {
+  if (grepl("^poly\\(.*\\)", variable)) {
+    column_name <- sub("^poly\\((\\w+).*", "\\1", variable)
+    degree <- sub(".*\\)(\\d+)", "\\1", variable)
+    if (!grepl("^\\d+$", degree)) {
+      # The pattern is a number
+      degree <- as.character(1)
+      }
+    return(paste(column_name, "d=", degree))
+  } else {
+    return(variable)
+  }
+}
+
+coefs_df$variable <- sapply(coefs_df$variable, transform_variable)
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Polynomial Model with Feature Selection Methods") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+```
+
+```{r,echo = FALSE}
+pred <- predict(model.pol.VS, newdata=x.test)
+lmRSS <- pred - y.test
+cat("RMSE: ",rmse(pred,y.test))
+summary(model.pol.VS)
+par(mfrow=c(2,2))
+plot(model.pol.VS)
+```
+
+##### Polynomial Regression model on all Features
+
+```{r, echo = FALSE}
+# Load the required library
+
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_EDA), replace=TRUE, prob=c(0.70,0.30))
+train <- data_EDA[sample, ]
+x.test <-data_EDA[!sample, ]
+y.test <- data_EDA[!sample, ]$Life.expectancy
+
+# Load the required library
+library(dplyr)
+
+# Fit a polynomial regression model
+degree <- 3  # Degree of the polynomial
+model.pol.EDA <- lm(Life.expectancy ~ poly(Adult.Mortality, degree, raw = TRUE) +
+             poly(Hepatitis.B, degree, raw = TRUE) + poly(BMI, degree, raw = TRUE) +
+             poly(Diphtheria, degree, raw = TRUE) + poly(HIV.AIDS, degree, raw = TRUE) +
+             poly(Income.composition.of.resources, degree, raw = TRUE) +
+             poly(Measles, degree, raw = TRUE) + poly(percentage.expenditure, degree, raw = TRUE) +
+             poly(Polio, degree, raw = TRUE) + poly(Schooling, degree, raw = TRUE) +
+             poly(Status, 1 , raw = TRUE) + poly(thinness..1.19.years, degree, raw = TRUE) +
+             poly(Total.expenditure, degree, raw = TRUE), data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(model.pol.EDA)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = names(coefs)[-1], coefficient = coefs[-1])
+
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+coefs_df$variable <- sapply(coefs_df$variable, transform_variable)
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Polinomial Model without Feature Selection Methods") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+```
+
+```{r, echo = FALSE}
+pred <- predict(model.pol.EDA, newdata=x.test)
+lmRSS <- pred - y.test
+cat("RMSE: ",rmse(pred,y.test))
+summary(model.pol.EDA)
+par(mfrow=c(2,2))
+plot(model.pol.EDA)
+```
+
+##### Combination for different variables different degree on selected features
+
+```{r, echo = FALSE}
+# Load the required library
+
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_VS), replace=TRUE, prob=c(0.70,0.30))
+train <- data_VS[sample, ]
+x.test <-data_VS[!sample, ]
+y.test <- data_VS[!sample, ]$Life.expectancy
+
+# Load the required library
+library(dplyr)
+
+# Fit a polynomial regression model
+
+model.pol.mixed.VS <- lm(Life.expectancy ~ poly(Adult.Mortality, 3, raw = TRUE) +
+             poly(Hepatitis.B, 1, raw = TRUE) + poly(BMI, 1, raw = TRUE) +
+             poly(Diphtheria, 1, raw = TRUE) + poly(HIV.AIDS, 3, raw = TRUE) +
+             poly(Income.composition.of.resources, 2, raw = TRUE) +
+             poly(Measles, 1, raw = TRUE) + poly(percentage.expenditure, 1, raw = TRUE) +
+             poly(Polio, 1, raw = TRUE) + poly(Schooling, 3, raw = TRUE) +
+             poly(Status, 1 , raw = TRUE) + poly(thinness..1.19.years, 3, raw = TRUE) +
+             poly(Total.expenditure, 1, raw = TRUE), data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(model.pol.mixed.VS)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = names(coefs)[-1], coefficient = coefs[-1])
+
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+coefs_df$variable <- sapply(coefs_df$variable, transform_variable)
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Polinomial Model with Feature Selection Methods") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+```
+
+```{r, echo = FALSE}
+pred <- predict(model.pol.mixed.VS, newdata=x.test)
+lmRSS <- pred - y.test
+cat("RMSE: ",rmse(pred,y.test))
+summary(model.pol.mixed.VS)
+par(mfrow=c(2,2))
+plot(model.pol.mixed.VS)
+```
+
+##### Combination for different variables different degree on all features
+
+```{r, echo = FALSE}
+# Load the required library
+
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(data_EDA), replace=TRUE, prob=c(0.70,0.30))
+train <- data_EDA[sample, ]
+x.test <-data_EDA[!sample, ]
+y.test <- data_EDA[!sample, ]$Life.expectancy
+
+# Load the required library
+library(dplyr)
+
+# Fit a polynomial regression model
+degree <- 3  # Degree of the polynomial
+model.pol.mixed.EDA <- lm(Life.expectancy ~ poly(Adult.Mortality, 3, raw = TRUE) +
+             poly(Hepatitis.B, 1, raw = TRUE) + poly(BMI, 1, raw = TRUE) +
+             poly(Diphtheria, 1, raw = TRUE) + poly(HIV.AIDS, 3, raw = TRUE) +
+             poly(Income.composition.of.resources, 2, raw = TRUE) +
+             poly(Measles, 1, raw = TRUE) + poly(percentage.expenditure, 1, raw = TRUE) +
+             poly(Polio, 1, raw = TRUE) + poly(Schooling, 3, raw = TRUE) +
+             poly(Status, 1 , raw = TRUE) + poly(thinness..1.19.years, 3, raw = TRUE) +
+             poly(Total.expenditure, 1, raw = TRUE), data = train)
+
+
+# Get the coefficient values from the optimized model
+coefs <- coef(model.pol.mixed.EDA)
+
+# Convert the coefficients to a data frame for plotting
+coefs_df <- data.frame(variable = names(coefs)[-1], coefficient = coefs[-1])
+
+coefs_df$variable <- factor(coefs_df$variable, levels = coefs_df$variable)
+
+
+coefs_df$variable <- sapply(coefs_df$variable, transform_variable)
+
+
+# Plot the coefficients using a bar plot
+ggplot(coefs_df, aes(x = variable, y = coefficient, fill = coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(x = "Variable", y = "Coefficient", title = "Coefficients of Polinomial Model without Feature Selection Methods") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#13527a", "purple")) 
+
+```
+
+```{r, echo = FALSE}
+pred <- predict(model.pol.mixed.EDA, newdata=x.test)
+lmRSS <- pred - y.test
+cat("RMSE: ",rmse(pred,y.test))
+summary(model.pol.mixed.EDA)
+par(mfrow=c(2,2))
+plot(model.pol.mixed.EDA)
+```
+
+#### Polynomial Regression Model Results
+
+| Model      | Type          | Degree | Mean Squared Error | R-squared | Adjusted R-squared | p-value |
+|:----------|:----------|:----------|:----------|:----------|:----------|:----------|
+| Polynomial | Reduced Model | 3      | 0.4036827          | 0.8529    | 0.8501             | 2.2e-16 |
+| Polynomial | Full Model    | 3      | 0.4036827          | 0.8529    | 0.8501             | 2.2e-16 |
+| Polynomial | Reduced Model | mixed  | 0.4112296          | 0.8471    | 0.8454             | 2.2e-16 |
+| Polynomial | Full Model    | mixed  | 0.4112296          | 0.8471    | 0.8454             | 2.2e-16 |
+
+# 5. Conclusions
+
+## 5.1 Regression Model Results
+
+| Model               | Type          | Mean Squared Error | R-squared | Adjusted R-squared |
+|:--------------|---------------|---------------|---------------|--------------:|
+| Lasso Regression    | Reduced Model | 0.2139883          | 0.7881891 |          0.7848954 |
+| Lasso Regression    | Full Model    | 0.2082843          | 0.7975627 |           0.793371 |
+| Ridge Regression    | Reduced Model | 0.214421           | 0.7877608 |          0.7844604 |
+| Ridge Regression    | Full Model    | 0.2100862          | 0.7958114 |          0.7915834 |
+| Simple Linear Model | Reduced Model | 0.4600969          | 0.7877    |             0.7864 |
+| Simple Linear Model | Full Model    | 0.4601041          | 0.789     |             0.7872 |
+| Polynomial D=3.     | Reduced Model | 0.4036827          | 0.8529    |             0.8501 |
+| Polynomial D=3.     | Full Model    | 0.4036827          | 0.8529    |             0.8501 |
+| Polynomial MIXED    | Reduced Model | 0.4112296          | 0.8471    |             0.8454 |
+| Polynomial MIXED    | Full Model    | 0.4112296          | 0.8471    |             0.8454 |
+
+Based on these metrics, we can see that the Lasso Regression model has a
+slightly lower MSE and a slightly higher R-squared value compared to the
+Ridge Regression model. This suggests that the Lasso Regression model
+performs slightly better in terms of prediction accuracy and explaining
+the variance in the target variable.
+
+However, it's important to note that the difference between the models
+is relatively small. Further analysis, such as cross-validation or
+hypothesis testing, could provide additional insights into the
+statistical significance and stability of the model performance.
+
+In addition, the full models (both Lasso and Ridge Regression) tend to
+perform slightly better than the reduced models. They have lower MSE
+values and higher R-squared and adjusted R-squared values, indicating
+better overall performance in terms of prediction accuracy and capturing
+the variance in the target variable. We can conclude that the Feature
+selection Model provides good results given that it decreases the number
+of features. it's important to consider other factors such as model
+complexity and interpretability when selecting the best model for a
+particular application.
+
+The polynomial models with degree 3 (both reduced and full) have similar
+MSE values, indicating a good fit to the data. The R-squared and
+adjusted R-squared values for these models are relatively high,
+suggesting a good explanation of the variance in the data. The
+polynomial mixed degree models also perform well, although slightly
+worse in terms of MSE compared to the degree 3 models. The R-squared and
+adjusted R-squared values for the mixed degree models are slightly lower
+than those of the degree 3 models but still indicate a reasonable fit.
+In conclusion, based on the given results, the Lasso Regression model on
+the whole dataset (Full Model) appears to be the better choice among the
+three models for predicting the target variable.
+
+Then we can say that the main factors that affect life expectancy are:
+
+-   Status
+-   Adult.Mortality
+-   percentage.expenditure
+-   Hepatitis.B
+-   Measles
+-   BMI
+-   thinness.5.9.years
+-   Polio
+-   Diphtheria
+-   HIV.AIDS
+-   Income.composition.of.resources
+-   Schooling
+
+We also came to the following conclusions:
+
+-   Education has a significant impact on life expectancy
+
+-   Life Expectancy have negative relationship with drinking alcohol
+
+-   Immunization against Hepatitis B and Diphtheria positively impact on
+    life Expectancy
+
+-   Countries with higher income composition of resources for human
+    development have a better life expectancy.
+
+-   There is no significant difference in proportions of the number of
+    infant deaths and the number of under-five deaths.
+
+-   There is no strong correlation between alcohol consumption and life
+    expectancy
+
+-   Most frequent range for life expectancy is 65--82 Years and the
+    least frequent range is less than 45 years and more than 85 years.
+
+-   Immunization coverage has a significant impact on life expectancy
+
+-   Population doesn\'t have big impact on life expectancy
