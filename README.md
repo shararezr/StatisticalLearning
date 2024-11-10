@@ -97,5 +97,5 @@ By the end of this project, we aim to uncover valuable insights about the factor
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/life-expectancy-analysis.git
-   cd life-expectancy-analysis
+   git clone https://github.com/shararezr/StatisticalLearning.git
+   cd StatisticalLearning
